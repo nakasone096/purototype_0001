@@ -1,0 +1,17 @@
+schema_version = "1.0.0"
+
+id = "tyuutoriaru3"
+version = "0.8.3"
+name = "3DCG Tutorial Simulator0043"
+tagline = "Interactive step-by-step 3DCG tutorial with auto-validation"
+maintainer = "Daichi"
+type = "add-on"
+
+blender_version_min = "4.2.0"
+
+license = [
+  "SPDX:GPL-3.0-or-later",
+]
+
+[permissions]
+files = "Save participant logs and render images to disk"
