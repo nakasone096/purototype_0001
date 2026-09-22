@@ -150,7 +150,9 @@ class StageManager:
     def open_folder_in_os(path: str):
         abs_path = StageManager.ensure_dir_exists(path)
         if os.name == "nt":
-            os.startfile(abs_path)  # type: ignore[attr-defined]
+            # os.startfile() はBlender埋め込みPythonから呼ぶとCOM状態の衝突で
+            # クラッシュすることがあるため、explorer.exeをプロセス起動する方式にする
+            subprocess.Popen(["explorer", abs_path])
         elif sys.platform == "darwin":
             subprocess.Popen(["open", abs_path])
         else:
