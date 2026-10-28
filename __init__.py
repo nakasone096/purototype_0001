@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 8, 3),
+    "version": (0, 8, 4),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -115,6 +115,11 @@ class StageRun(PropertyGroup):
 # STAGE MANAGER
 # =====================================================
 
+# Blender の FloatProperty は 32bit 浮動小数点のため、UNIX時間（約17億）をそのまま保存すると
+# 最大±64秒ずれる。ステージ開始時刻などプロパティに保存する時刻は、起動時からの相対秒（_rel）にする。
+_T0 = time.time()
+
+
 class StageManager:
     # -----------------------------
     # Time/helpers
@@ -122,6 +127,10 @@ class StageManager:
     @staticmethod
     def _now():
         return time.time()
+
+    @staticmethod
+    def _rel():
+        return time.time() - _T0
 
     @staticmethod
     def degrees_to_radians_xyz(deg_xyz):
@@ -179,7 +188,7 @@ class StageManager:
         props = context.scene.tutorial_props
         if props.stage_start_time <= 0.0:
             return 0.0
-        return max(0.0, StageManager._now() - props.stage_start_time)
+        return max(0.0, StageManager._rel() - props.stage_start_time)
 
     @staticmethod
     def ensure_participant_log_file(context) -> bool:
@@ -314,7 +323,7 @@ class StageManager:
             "stalled_seconds": float(stalled_seconds),
             "last_reason": props.last_reason or "",
             "last_message": props.last_message or "",
-            "stage_started_at": float(props.stage_start_time),
+            "stage_started_at": (_T0 + float(props.stage_start_time)) if props.stage_start_time > 0 else 0.0,
             # 追加フィールド
             "hint_level": min(int(props.failed_validate_count), 3),
             "reason_sequence": reason_seq,
@@ -335,7 +344,7 @@ class StageManager:
         if props.stage_start_time <= 0.0:
             return
 
-        now = StageManager._now()
+        now = StageManager._rel()
         stalled = max(0.0, now - props.stage_start_time)
 
         r = props.stage_runs.add()
@@ -2227,7 +2236,7 @@ class TUTORIAL_OT_setup_stage(Operator):
         props.monitoring_active = True
 
         props.failed_validate_count = 0
-        props.stage_start_time = time.time()
+        props.stage_start_time = StageManager._rel()
         props.current_stall_seconds = 0.0
         props.last_result_ok = True
         props.last_reason = ""
@@ -2259,7 +2268,7 @@ class TUTORIAL_OT_validate_stage(Operator):
         props = context.scene.tutorial_props
 
         if props.first_attempt_time <= 0.0:
-            props.first_attempt_time = time.time()
+            props.first_attempt_time = StageManager._rel()
 
         ok, message, reason, hints = StageManager.validate_stage(context)
 
@@ -2358,7 +2367,7 @@ class TUTORIAL_OT_next_stage(Operator):
 
         try:
             StageManager.reset_scene_for_chapter(context)
-            props.stage_start_time = time.time()
+            props.stage_start_time = StageManager._rel()
             props.monitoring_active = True
             StageManager.log_setup_event(context)
         except Exception as e:
@@ -2516,7 +2525,7 @@ class TUTORIAL_OT_stage_prev(Operator):
         props.survey_difficulty = 0
         try:
             StageManager.reset_scene_for_chapter(context)
-            props.stage_start_time = time.time()
+            props.stage_start_time = StageManager._rel()
             props.monitoring_active = True
             StageManager.log_setup_event(context)
         except Exception as e:
@@ -2572,7 +2581,7 @@ class TUTORIAL_OT_stage_next_free(Operator):
         props.survey_difficulty = 0
         try:
             StageManager.reset_scene_for_chapter(context)
-            props.stage_start_time = time.time()
+            props.stage_start_time = StageManager._rel()
             props.monitoring_active = True
             StageManager.log_setup_event(context)
         except Exception as e:
