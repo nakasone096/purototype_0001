@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 8, 4),
+    "version": (0, 8, 5),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -150,6 +150,35 @@ class StageManager:
         return os.path.join("~", "tutorial_logs") + os.sep
 
     @staticmethod
+    def desktop_dir() -> str:
+        """実際のデスクトップのパス（OneDrive配下などにリダイレクトされていても取得できる）。"""
+        if os.name == "nt":
+            try:
+                import winreg
+                with winreg.OpenKey(
+                        winreg.HKEY_CURRENT_USER,
+                        r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders") as k:
+                    path, _ = winreg.QueryValueEx(k, "Desktop")
+                if path and os.path.isdir(path):
+                    return path
+            except Exception:
+                pass
+        return os.path.join(os.path.expanduser("~"), "Desktop")
+
+    @staticmethod
+    def auto_log_dir(props) -> str:
+        """デスクトップ/学籍番号_addon （例：23DB999_addon）。参加者ID未入力なら空文字。"""
+        pid = StageManager._safe_participant_id(props.participant_id)
+        if not pid:
+            return ""
+        return os.path.join(StageManager.desktop_dir(), f"{pid}_addon")
+
+    @staticmethod
+    def resolve_log_dir(props) -> str:
+        """欄が空なら、デスクトップ/学籍番号_addon を使う。それも決められなければ既定フォルダ。"""
+        return (props.log_dir or "").strip() or StageManager.auto_log_dir(props) or StageManager.default_log_dir()
+
+    @staticmethod
     def ensure_dir_exists(path: str) -> str:
         abs_path = bpy.path.abspath(path)
         os.makedirs(abs_path, exist_ok=True)
@@ -199,11 +228,8 @@ class StageManager:
             props.participant_log_error = "参加者IDが未入力です"
             return False
 
-        if not (props.log_dir or "").strip():
-            props.log_dir = StageManager.default_log_dir()
-
         try:
-            dir_abs = StageManager.ensure_dir_exists(props.log_dir)
+            dir_abs = StageManager.ensure_dir_exists(StageManager.resolve_log_dir(props))
         except Exception as e:
             props.participant_log_error = f"ログ保存フォルダ作成に失敗: {e}"
             return False
@@ -1934,9 +1960,9 @@ class TUTORIAL_PG_Properties(PropertyGroup):
     participant_id: StringProperty(name="参加者ID", default="")
     log_dir: StringProperty(
         name="ログ保存フォルダ",
-        description="クリックでフォルダ選択（環境によってFile Browserが落ちる場合あり：下の安全ボタンを使用）",
-        subtype='DIR_PATH',
-        default=StageManager.default_log_dir(),
+        description="空欄ならデスクトップの「学籍番号_addon」フォルダに自動で保存します。"
+                    "（フォルダ選択ボタンはBlenderが落ちることがあるため使いません）",
+        default="",
     )
     participant_log_path: StringProperty(default="")
     participant_log_error: StringProperty(default="")
@@ -1957,12 +1983,16 @@ class TUTORIAL_PG_Properties(PropertyGroup):
 
 class TUTORIAL_OT_set_default_log_dir(Operator):
     bl_idname = "tutorial.set_default_log_dir"
-    bl_label = "既定フォルダに設定"
-    bl_description = "ログ保存フォルダを既定値に戻し、フォルダも作成します"
+    bl_label = "フォルダを自動作成"
+    bl_description = "デスクトップに「学籍番号_addon」フォルダ（例：23DB999_addon）を作り、ログ保存先に設定します"
 
     def execute(self, context):
         props = context.scene.tutorial_props
-        props.log_dir = StageManager.default_log_dir()
+        target = StageManager.auto_log_dir(props)
+        if not target:
+            self.report({'ERROR'}, "先に参加者IDを入力してください")
+            return {'CANCELLED'}
+        props.log_dir = target
         try:
             StageManager.ensure_dir_exists(props.log_dir)
         except Exception as e:
@@ -1979,7 +2009,7 @@ class TUTORIAL_OT_open_log_folder(Operator):
     def execute(self, context):
         props = context.scene.tutorial_props
         try:
-            StageManager.open_folder_in_os(props.log_dir or StageManager.default_log_dir())
+            StageManager.open_folder_in_os(StageManager.resolve_log_dir(props))
         except Exception as e:
             self.report({'ERROR'}, f"フォルダを開けません: {e}")
             return {'CANCELLED'}
@@ -2146,7 +2176,7 @@ class TUTORIAL_OT_render_and_mark_saved(Operator):
     def execute(self, context):
         props = context.scene.tutorial_props
         try:
-            base_dir = StageManager.ensure_dir_exists(props.log_dir or StageManager.default_log_dir())
+            base_dir = StageManager.ensure_dir_exists(StageManager.resolve_log_dir(props))
         except Exception as e:
             self.report({'ERROR'}, f"ログ保存フォルダ作成に失敗: {e}")
             return {'CANCELLED'}
@@ -2249,10 +2279,8 @@ class TUTORIAL_OT_setup_stage(Operator):
         props.undo_count = 0
         props.survey_difficulty = 0
 
-        if not (props.log_dir or "").strip():
-            props.log_dir = StageManager.default_log_dir()
         try:
-            StageManager.ensure_dir_exists(props.log_dir)
+            StageManager.ensure_dir_exists(StageManager.resolve_log_dir(props))
         except Exception as e:
             props.participant_log_error = f"ログ保存フォルダ作成に失敗: {e}"
 
@@ -2669,9 +2697,11 @@ class TUTORIAL_PT_main(Panel):
         pbox.label(text="参加者ログ（DIR_PATH + 安全ボタン）")
         pbox.prop(props, "participant_id")
         pbox.prop(props, "log_dir")
+        if not (props.log_dir or "").strip():
+            pbox.label(text="空欄＝デスクトップの「学籍番号_addon」に自動保存")
 
         row = pbox.row(align=True)
-        row.operator("tutorial.set_default_log_dir", text="既定フォルダに設定")
+        row.operator("tutorial.set_default_log_dir", text="フォルダを自動作成")
         row.operator("tutorial.open_log_folder", text="ログフォルダを開く")
 
         pbox.prop(props, "enable_participant_logging", text="ログ記録を有効化")
