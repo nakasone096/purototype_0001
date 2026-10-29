@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 9, 3),
+    "version": (0, 9, 4),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -1338,7 +1338,7 @@ class StageManager:
                                "   （向きも量も自由。G → Z のように軸を決めてもOK）\n"
                                "   大きさを変える（S）、回す（R）でもOK\n"
                                "③ Ctrl+Z を押して、取り消してみよう\n"
-                               "④ 取り消せたらクリア（反応しないときは「確認」ボタン）"},
+                               "④ 取り消せたら「確認」ボタンを押す"},
                 3: {"title": "第3章: オブジェクト操作", "name": "ステージ3: 削除",
                     "description": "オブジェクトを削除してください",
                     "details": "① オブジェクトをクリックして選択\n"
@@ -2506,8 +2506,7 @@ class TUTORIAL_OT_setup_stage(Operator):
         layout.separator()
         col = layout.column(align=True)
         col.label(text="【セットアップ】 問題を準備します（最初に押す）")
-        col.label(text="【監視開始】　　自動で正誤を判定します")
-        col.label(text="【確認】　　　　答え合わせをします")
+        col.label(text="【確認】　　　　できたら押す（答え合わせをします）")
         col.label(text="【次へ】　　　　クリアしたら次のステージへ")
         col.label(text="【← →】　　　ステージを自由に移動できます")
         layout.separator()
@@ -3156,11 +3155,7 @@ class TUTORIAL_PT_main(Panel):
         col = layout.column()
         col.scale_y = 1.2
         col.operator("tutorial.setup_stage", text="セットアップ")
-        if props.monitoring_active:
-            col.label(text="● 監視中（自動判定）")
-        else:
-            col.operator("wm.tutorial_monitoring", text="監視開始")
-        col.operator("tutorial.validate_stage", text="確認")
+        col.operator("tutorial.validate_stage", text="確認（できたら押す）")
 
         # クリア時は目立つ表示に切り替え
         if props.stage_complete:
