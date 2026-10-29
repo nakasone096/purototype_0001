@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 8, 5),
+    "version": (0, 8, 6),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -119,8 +119,13 @@ class StageRun(PropertyGroup):
 # 最大±64秒ずれる。ステージ開始時刻などプロパティに保存する時刻は、起動時からの相対秒（_rel）にする。
 _T0 = time.time()
 
+# Ctrl+Z の発生時刻（相対秒）。シーンのプロパティはUndoで巻き戻るため、シーンの外に持つ
+_UNDO_TIMES = []
+
 
 class StageManager:
+    _st_enter_t = 0.0   # 現在のステージに入った時刻（相対秒・シーン外）
+
     # -----------------------------
     # Time/helpers
     # -----------------------------
@@ -1228,7 +1233,7 @@ class StageManager:
                     "description": "Ctrl+Z でミスを取り消せます",
                     "details": "① G → X → 3 → Enter でキューブを動かす\n"
                                "② Ctrl+Z を押して元の位置に戻してみよう\n"
-                               "③ 試したら「確認」ボタンを押してください"},
+                               "③ 押すと自動でクリアになります（反応しないときは「確認」ボタン）"},
                 3: {"title": "第3章: オブジェクト操作", "name": "ステージ3: 削除",
                     "description": "オブジェクトを削除してください",
                     "details": "① オブジェクトをクリックして選択\n"
@@ -1513,9 +1518,16 @@ class StageManager:
                     "「立方体」や「UV球」など好きなものを選んで追加できます",
                 ]
 
-            # --- 新St2: Ctrl+Z の説明ステージ（確認ボタンで通過）---
+            # --- 新St2: Ctrl+Z を実際に押したか（シーン外の記録で判定）---
             if st == 2:
-                return True, "✓ Ctrl+Z の使い方を確認しました", "OK", []
+                entered = StageManager._st_enter_t
+                if entered > 0.0 and any(t > entered for t in _UNDO_TIMES):
+                    return True, "✓ Ctrl+Z で元に戻せました", "OK", []
+                return False, "❌ まだ Ctrl+Z が押されていません", "UNDO_NOT_USED", [
+                    "① G → X → 3 → Enter でキューブを動かしてください",
+                    "② Ctrl+Z を押すと、直前の操作が取り消されて元の位置に戻ります",
+                    "（マウスを3Dビューの上に置いて押してください）",
+                ]
 
             # --- 新St3: Delete で削除 ---
             if st == 3:
@@ -1878,9 +1890,6 @@ class StageManager:
     def check_stage(context):
         try:
             props = context.scene.tutorial_props
-            # Ch3 St2 は説明確認ステージのため自動判定しない
-            if props.current_chapter == 3 and props.current_stage == 2:
-                return
             ok, message, reason, hints = StageManager.validate_stage(context)
 
             props.last_result_ok = ok
@@ -2267,6 +2276,7 @@ class TUTORIAL_OT_setup_stage(Operator):
 
         props.failed_validate_count = 0
         props.stage_start_time = StageManager._rel()
+        StageManager._st_enter_t = StageManager._rel()
         props.current_stall_seconds = 0.0
         props.last_result_ok = True
         props.last_reason = ""
@@ -2396,6 +2406,7 @@ class TUTORIAL_OT_next_stage(Operator):
         try:
             StageManager.reset_scene_for_chapter(context)
             props.stage_start_time = StageManager._rel()
+            StageManager._st_enter_t = StageManager._rel()
             props.monitoring_active = True
             StageManager.log_setup_event(context)
         except Exception as e:
@@ -2554,6 +2565,7 @@ class TUTORIAL_OT_stage_prev(Operator):
         try:
             StageManager.reset_scene_for_chapter(context)
             props.stage_start_time = StageManager._rel()
+            StageManager._st_enter_t = StageManager._rel()
             props.monitoring_active = True
             StageManager.log_setup_event(context)
         except Exception as e:
@@ -2610,6 +2622,7 @@ class TUTORIAL_OT_stage_next_free(Operator):
         try:
             StageManager.reset_scene_for_chapter(context)
             props.stage_start_time = StageManager._rel()
+            StageManager._st_enter_t = StageManager._rel()
             props.monitoring_active = True
             StageManager.log_setup_event(context)
         except Exception as e:
@@ -2931,6 +2944,11 @@ class TUTORIAL_PT_shortcuts(Panel):
 @bpy.app.handlers.persistent
 def _tutorial_undo_handler(*args):
     """Ctrl+Z 検出: 監視中のみカウント＆ログ記録"""
+    try:
+        _UNDO_TIMES.append(StageManager._rel())
+        del _UNDO_TIMES[:-200]
+    except Exception:
+        pass
     try:
         scene = bpy.context.scene
         if not scene or not hasattr(scene, 'tutorial_props'):
