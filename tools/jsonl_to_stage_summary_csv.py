@@ -23,7 +23,7 @@ def main(jsonl_path: str):
     # stage単位に集計
     by_stage = {}
     for ev in rows:
-        if ev.get("event") not in ("validate", "finalize", "setup", "steps_opened"):
+        if ev.get("event") not in ("validate", "finalize", "setup", "steps_opened", "difficulty_changed"):
             continue
         ch = ev.get("chapter")
         st = ev.get("stage")
@@ -38,11 +38,14 @@ def main(jsonl_path: str):
             "completed": "",  # 最後のfinalizeのcompletedを入れる
             "difficulty_mode": "",
             "steps_opened": 0,   # 「手順を見る」を開いた回数（難易度ふつうのみ）
+            "difficulty_changes": 0,   # 難易度を変更した回数
         })
         if ev.get("difficulty_mode"):
             by_stage[key]["difficulty_mode"] = str(ev["difficulty_mode"])
         if ev.get("event") == "steps_opened":
             by_stage[key]["steps_opened"] += 1
+        if ev.get("event") == "difficulty_changed":
+            by_stage[key]["difficulty_changes"] += 1
 
         if ev.get("event") == "validate":
             if ev.get("ok") is False:
@@ -68,10 +71,10 @@ def main(jsonl_path: str):
         w.writerow(["participant_file", str(p.name)])
         w.writerow(["total_stalled_seconds", f"{total_time:.3f}"])
         w.writerow([])
-        w.writerow(["chapter", "stage", "failures", "stalled_seconds", "completed", "difficulty_mode", "steps_opened"])
+        w.writerow(["chapter", "stage", "failures", "stalled_seconds", "completed", "difficulty_mode", "steps_opened", "difficulty_changes"])
         for k in stage_keys:
             r = by_stage[k]
-            w.writerow([r["chapter"], r["stage"], r["failures"], f"{r['stalled_seconds']:.3f}", r["completed"], r["difficulty_mode"], r["steps_opened"]])
+            w.writerow([r["chapter"], r["stage"], r["failures"], f"{r['stalled_seconds']:.3f}", r["completed"], r["difficulty_mode"], r["steps_opened"], r["difficulty_changes"]])
 
     print(f"written: {out_csv}")
 

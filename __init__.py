@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 9, 0),
+    "version": (0, 9, 1),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -2073,6 +2073,31 @@ class StageManager:
 # PROPERTIES
 # =====================================================
 
+# 直前の難易度（シーンのプロパティはUndoで巻き戻るため、シーンの外に持つ）
+_LAST_DIFFICULTY = {"value": None}
+
+
+def _on_difficulty_changed(self, context):
+    """難易度が変わったら、いつ・どのステージで・何から何に変えたかをログに残す。"""
+    try:
+        new = self.difficulty_mode
+        old = _LAST_DIFFICULTY["value"]
+        _LAST_DIFFICULTY["value"] = new
+        if old is None or old == new:
+            return
+        StageManager.append_participant_event(bpy.context, {
+            "t": StageManager._now(),
+            "participant_id": StageManager._safe_participant_id(self.participant_id),
+            "event": "difficulty_changed",
+            "chapter": self.current_chapter,
+            "stage": self.current_stage,
+            "from": old,
+            "to": new,
+        })
+    except Exception:
+        pass
+
+
 class TUTORIAL_PG_Properties(PropertyGroup):
     current_chapter: IntProperty(default=1, min=1, max=8)
     current_stage: IntProperty(default=1, min=1, max=10)
@@ -2128,6 +2153,7 @@ class TUTORIAL_PG_Properties(PropertyGroup):
             ('HARD',   "むずかしい", "機能の説明だけ表示（ショートカットも手順もなし）。ヒントも出さない"),
         ],
         default='NORMAL',
+        update=_on_difficulty_changed,
     )
     # 「手順を見る」を開いたステージ（"章-ステージ"）。開いていなければ空
     steps_open_key: StringProperty(default="")
@@ -2260,7 +2286,7 @@ class TUTORIAL_OT_export_stage_summary_csv(Operator):
         by_stage = {}
         for ev in events:
             ev_type = ev.get("event")
-            if ev_type not in ("validate", "finalize", "steps_opened"):
+            if ev_type not in ("validate", "finalize", "steps_opened", "difficulty_changed"):
                 continue
             ch = ev.get("chapter")
             st = ev.get("stage")
@@ -2275,8 +2301,10 @@ class TUTORIAL_OT_export_stage_summary_csv(Operator):
                     "time_to_first_attempt_s": None, "time_to_success_s": None,
                     "reason_sequence": None,
                     "undo_count": None, "survey_difficulty": None,
-                    "difficulty_mode": None, "steps_opened": 0,
+                    "difficulty_mode": None, "steps_opened": 0, "difficulty_changes": 0,
                 }
+            if ev_type == "difficulty_changed":
+                by_stage[key]["difficulty_changes"] += 1
             if ev_type == "steps_opened":
                 by_stage[key]["steps_opened"] += 1
                 if ev.get("difficulty_mode") is not None and by_stage[key]["difficulty_mode"] is None:
@@ -2324,7 +2352,7 @@ class TUTORIAL_OT_export_stage_summary_csv(Operator):
                     "completed", "hint_level", "setup_count",
                     "time_to_first_attempt_s", "time_to_success_s",
                     "undo_count", "survey_difficulty", "difficulty_mode", "reason_sequence",
-                    "steps_opened",
+                    "steps_opened", "difficulty_changes",
                 ])
                 for key in sorted(by_stage.keys()):
                     r = by_stage[key]
@@ -2342,7 +2370,7 @@ class TUTORIAL_OT_export_stage_summary_csv(Operator):
                         _fmt_any(r["survey_difficulty"]),
                         _fmt_any(r["difficulty_mode"]),
                         _fmt_any(r["reason_sequence"]),
-                        r["steps_opened"],
+                        r["steps_opened"], r["difficulty_changes"],
                     ])
         except Exception as e:
             self.report({'ERROR'}, f"CSV出力に失敗: {e}")
@@ -2485,6 +2513,7 @@ class TUTORIAL_OT_setup_stage(Operator):
         props.first_attempt_time = 0.0
         props.undo_count = 0
         props.survey_difficulty = 0
+        _LAST_DIFFICULTY["value"] = props.difficulty_mode
 
         try:
             StageManager.ensure_dir_exists(StageManager.resolve_log_dir(props))
