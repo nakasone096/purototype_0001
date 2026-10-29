@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 9, 1),
+    "version": (0, 9, 2),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -105,7 +105,7 @@ STAGE_ABOUT = {
     (2, 3): "ビュー回転とは\n  視点をぐるりと回すこと\n  裏側も見られる",
     (2, 4): "ビュー操作の組み合わせ\n  回す・ずらす・寄るを使い分けて\n  見たい角度に合わせる",
     (3, 1): "オブジェクトの追加とは\n  新しい形（立方体・球など）を\n  シーンに足すこと",
-    (3, 2): "元に戻す（アンドゥ）とは\n  直前の操作を取り消すこと\n  失敗しても大丈夫",
+    (3, 2): "元に戻す（アンドゥ）とは\n  直前の操作を取り消すこと\n  まず1つ操作してから試そう",
     (3, 3): "削除とは\n  選んだオブジェクトを消すこと",
     (3, 4): "エディットモードとは\n  形そのもの（頂点・辺・面）を\n  直接いじるモード",
     (3, 5): "頂点とは\n  形をつくる点のこと\n  頂点を動かすと形が変わる",
@@ -170,6 +170,25 @@ _UNDO_TIMES = []
 
 class StageManager:
     _st_enter_t = 0.0   # 現在のステージに入った時刻（相対秒・シーン外）
+    _st2_action_t = 0.0  # Ch3 St2: キューブを動かした／形を変えたのを最初に検出した時刻（シーン外）
+
+    @staticmethod
+    def cube_modified():
+        """Ch3 St2: キューブを動かした・回した・拡縮した、またはエディットモードで頂点を動かしたか"""
+        for o in bpy.data.objects:
+            if o.type != 'MESH':
+                continue
+            if (any(abs(v) > 0.01 for v in o.location)
+                    or any(abs(v) > 0.01 for v in o.rotation_euler)
+                    or any(abs(v - 1.0) > 0.01 for v in o.scale)):
+                return True
+            if o.mode == 'EDIT':
+                coords = [tuple(v.co) for v in bmesh.from_edit_mesh(o.data).verts]
+            else:
+                coords = [tuple(v.co) for v in o.data.vertices]
+            if any(abs(abs(c) - 1.0) > 0.01 for co in coords for c in co):
+                return True
+        return False
 
     # -----------------------------
     # Time/helpers
@@ -1313,9 +1332,11 @@ class StageManager:
                     "details": "① Shift+A を押す\n"
                                "② メッシュ → 立方体（または好きなもの）を選択"},
                 2: {"title": "第3章: オブジェクト操作", "name": "ステージ2: 元に戻す",
-                    "description": "Ctrl+Z でミスを取り消せます",
-                    "details": "① G → X → 3 → Enter でキューブを動かす\n"
-                               "② Ctrl+Z を押して元の位置に戻してみよう\n"
+                    "description": "キューブを動かしてから、Ctrl+Z で元に戻してください",
+                    "details": "① キューブをクリックで選び、何か1つ操作する\n"
+                               "   ・G → X → 3 → Enter で動かす\n"
+                               "   ・S → 2 → Enter で大きさを変える、R で回す でもOK\n"
+                               "② Ctrl+Z を押して、元の状態に戻してみよう\n"
                                "③ 押すと自動でクリアになります（反応しないときは「確認」ボタン）"},
                 3: {"title": "第3章: オブジェクト操作", "name": "ステージ3: 削除",
                     "description": "オブジェクトを削除してください",
@@ -1629,14 +1650,25 @@ class StageManager:
                     "「立方体」や「UV球」など好きなものを選んで追加できます",
                 ]
 
-            # --- 新St2: Ctrl+Z を実際に押したか（シーン外の記録で判定）---
+            # --- 新St2: 先にキューブを操作し、そのあとに Ctrl+Z を押したか（シーン外の記録で判定）---
             if st == 2:
                 entered = StageManager._st_enter_t
-                if entered > 0.0 and any(t > entered for t in _UNDO_TIMES):
-                    return True, "✓ Ctrl+Z で元に戻せました", "OK", []
+                # 操作を検出した時刻を記録（Ctrl+Z で元に戻ると変化は消えるので、最初に見たときだけ残す）
+                if (entered > 0.0 and StageManager._st2_action_t <= 0.0
+                        and StageManager.cube_modified()):
+                    StageManager._st2_action_t = StageManager._rel()
+                acted = StageManager._st2_action_t
+                if acted > 0.0 and any(t > acted for t in _UNDO_TIMES):
+                    return True, "✓ 操作を Ctrl+Z で元に戻せました", "OK", []
+                if acted <= 0.0:
+                    return False, "❌ まずキューブを動かしてください", "NO_ACTION_YET", [
+                        "キューブを左クリックで選び、G → X → 3 → Enter で動かしてみましょう",
+                        "動かす代わりに、S で大きさを変える・R で回す でもOKです",
+                        "操作したあとで Ctrl+Z を押すと、元に戻ります",
+                    ]
                 return False, "❌ まだ Ctrl+Z が押されていません", "UNDO_NOT_USED", [
-                    "① G → X → 3 → Enter でキューブを動かしてください",
-                    "② Ctrl+Z を押すと、直前の操作が取り消されて元の位置に戻ります",
+                    "キューブを動かせました。次は Ctrl+Z を押してください",
+                    "直前の操作が取り消されて、元の状態に戻ります",
                     "（マウスを3Dビューの上に置いて押してください）",
                 ]
 
@@ -2502,6 +2534,7 @@ class TUTORIAL_OT_setup_stage(Operator):
         props.failed_validate_count = 0
         props.stage_start_time = StageManager._rel()
         StageManager._st_enter_t = StageManager._rel()
+        StageManager._st2_action_t = 0.0
         props.current_stall_seconds = 0.0
         props.last_result_ok = True
         props.last_reason = ""
@@ -2633,6 +2666,7 @@ class TUTORIAL_OT_next_stage(Operator):
             StageManager.reset_scene_for_chapter(context)
             props.stage_start_time = StageManager._rel()
             StageManager._st_enter_t = StageManager._rel()
+            StageManager._st2_action_t = 0.0
             props.monitoring_active = True
             StageManager.log_setup_event(context)
         except Exception as e:
@@ -2792,6 +2826,7 @@ class TUTORIAL_OT_stage_prev(Operator):
             StageManager.reset_scene_for_chapter(context)
             props.stage_start_time = StageManager._rel()
             StageManager._st_enter_t = StageManager._rel()
+            StageManager._st2_action_t = 0.0
             props.monitoring_active = True
             StageManager.log_setup_event(context)
         except Exception as e:
@@ -2849,6 +2884,7 @@ class TUTORIAL_OT_stage_next_free(Operator):
             StageManager.reset_scene_for_chapter(context)
             props.stage_start_time = StageManager._rel()
             StageManager._st_enter_t = StageManager._rel()
+            StageManager._st2_action_t = 0.0
             props.monitoring_active = True
             StageManager.log_setup_event(context)
         except Exception as e:
