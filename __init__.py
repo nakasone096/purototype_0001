@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 8, 6),
+    "version": (0, 9, 0),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -41,6 +41,9 @@ REFERENCE_IMAGE_LOCATION  = (1.6, 2.2, 0.0)
 REFERENCE_IMAGE_ROTATION_DEG = (90.0, 0.0, 90.0)
 REFERENCE_IMAGE_DISPLAY_SIZE  = 2.0
 
+# 各チャプターのステージ数（Ch1・Ch3・Ch4の末尾は「復習」ステージ）
+MAX_STAGES = {1: 5, 2: 4, 3: 10, 4: 5, 5: 4, 6: 5, 7: 1, 8: 6}
+
 # =====================================================
 # SHORTCUT TABLE
 # (intro_ch, intro_st, section, action, keys)
@@ -76,6 +79,10 @@ SHORTCUT_TABLE = [
     # --- Ch4: モディファイアー ---
     (4, 1, "モディファイアー", "モディファイアー追加", "プロパティ → レンチアイコン → 追加"),
     (4, 1, "モディファイアー", "適用",               "モディファイアー → 適用"),
+    (4, 2, "モディファイアー", "ミラー",             "レンチ → 追加 → 生成 → ミラー"),
+    (4, 3, "モディファイアー", "ソリッド化",          "レンチ → 追加 → 生成 → ソリッド化"),
+    (4, 4, "モディファイアー", "ベベル",             "レンチ → 追加 → 生成 → ベベル"),
+    (4, 5, "モディファイアー", "ベベルの調整",        "パネルの「量」「セグメント」の数値"),
     # --- Ch5: スカルプト ---
     (5, 1, "スカルプト",  "ブラシサイズ",     "F → ドラッグ"),
     (5, 1, "スカルプト",  "強さ調整",         "Shift + F → ドラッグ"),
@@ -83,7 +90,45 @@ SHORTCUT_TABLE = [
     # --- Ch6: マテリアル ---
     (6, 1, "マテリアル",  "ノード追加",       "Shift + A（ノードエディター内）"),
     (6, 1, "マテリアル",  "ノード削除",       "X（ノードエディター内）"),
+    (6, 3, "マテリアル",  "画像を選ぶ",       "画像ノードの画像欄 → fruit_apple"),
 ]
+
+# 難易度「ふつう」「むずかしい」で、手順の全文の代わりに表示する機能の説明
+STAGE_ABOUT = {
+    (1, 1): "選択とは\n  操作するオブジェクトを決めること\n  選んだものだけが動く・変わる",
+    (1, 2): "移動とは\n  オブジェクトの位置を変えること\n  X・Y・Zの軸ごとに動かせる",
+    (1, 3): "回転とは\n  オブジェクトの向きを変えること\n  軸を決めて角度で回す",
+    (1, 4): "拡大縮小（スケール）とは\n  オブジェクトの大きさを変えること\n  倍率で指定する（2なら2倍）",
+    (1, 5): "復習：変えた形を元に戻そう\n  回転0°・スケール1が元の状態\n  数値を見つけて直すこともできる",
+    (2, 1): "パンとは\n  視点を上下左右に平行移動すること\n  オブジェクト自体は動かない",
+    (2, 2): "ズームとは\n  視点を近づけたり遠ざけたりすること",
+    (2, 3): "ビュー回転とは\n  視点をぐるりと回すこと\n  裏側も見られる",
+    (2, 4): "ビュー操作の組み合わせ\n  回す・ずらす・寄るを使い分けて\n  見たい角度に合わせる",
+    (3, 1): "オブジェクトの追加とは\n  新しい形（立方体・球など）を\n  シーンに足すこと",
+    (3, 2): "元に戻す（アンドゥ）とは\n  直前の操作を取り消すこと\n  失敗しても大丈夫",
+    (3, 3): "削除とは\n  選んだオブジェクトを消すこと",
+    (3, 4): "エディットモードとは\n  形そのもの（頂点・辺・面）を\n  直接いじるモード",
+    (3, 5): "頂点とは\n  形をつくる点のこと\n  頂点を動かすと形が変わる",
+    (3, 6): "エッジ（辺）とは\n  頂点と頂点をつなぐ線のこと",
+    (3, 7): "フェース（面）とは\n  辺で囲まれた平らな部分のこと",
+    (3, 8): "押し出し（エクストルード）とは\n  選んだ面を外に伸ばして\n  出っ張りをつくる機能",
+    (3, 9): "ループカットとは\n  メッシュをぐるっと一周切って\n  新しい辺のループを足す機能",
+    (3, 10): "復習：ここまでの組み合わせ\n  追加 → ループカット → 2倍に拡大\n  順番は自分で考えよう",
+    (4, 1): "サブディビジョンサーフェスとは\n  面を細かく分けて\n  形をなめらかにする機能",
+    (4, 2): "ミラーとは\n  片側の形を反対側にも映して\n  左右対称にする機能",
+    (4, 3): "ソリッド化とは\n  面に厚みをつける機能",
+    (4, 4): "ベベルとは\n  角を丸める（面取りする）機能\n  量＝大きさ／セグメント＝なめらかさ",
+    (4, 5): "復習：ベベルの数値を調整しよう\n  セグメントを増やすほど\n  角がなめらかな丸みになる",
+    (5, 1): "スカルプトモードとは\n  粘土をこねるように形を変えるモード",
+    (5, 2): "Drawブラシとは\n  表面を盛り上げるブラシ\n  Ctrlを押すと凹ませられる",
+    (5, 3): "Smoothブラシとは\n  表面をなめらかにならすブラシ",
+    (5, 4): "Grabブラシとは\n  形をつまんで動かすブラシ",
+    (6, 1): "マテリアルとは\n  オブジェクトの色や質感の設定のこと",
+    (6, 2): "ベースカラーとは\n  オブジェクトの基本の色のこと",
+    (6, 3): "画像テクスチャとは\n  画像をオブジェクトの表面に貼ること",
+    (6, 4): "ノード接続とは\n  ノードどうしを線でつないで\n  画像の色をベースカラーに使うこと",
+    (6, 5): "質感（粗さ・メタリック）とは\n  粗さ：ツルツル⇔ザラザラ\n  メタリック：金属らしさ",
+}
 
 # =====================================================
 # VERTEX POSITION STORAGE
@@ -617,6 +662,12 @@ class StageManager:
             if props.current_stage == 1:
                 cube.select_set(False)
                 bpy.context.view_layer.objects.active = None
+            elif props.current_stage == 5:
+                # 復習：回転とスケールを変えた状態から始める（元に戻す課題）
+                cube.rotation_euler = tuple(math.radians(45.0) for _ in range(3))
+                cube.scale = (3.0, 3.0, 3.0)
+                bpy.context.view_layer.objects.active = cube
+                cube.select_set(True)
 
         elif ch == 2:
             # キューブのトランスフォームをリセット
@@ -648,8 +699,8 @@ class StageManager:
             st = props.current_stage
             StageManager._clear_scene_no_undo()
 
-            if st == 1:
-                pass  # Shift+A ステージ: 空の状態からスタート
+            if st in (1, 10):
+                pass  # Shift+A ステージ／組み合わせ（復習）: 空の状態からスタート
 
             elif st == 2:
                 cube = StageManager._make_cube_no_undo("Cube", size=2.0)
@@ -681,6 +732,11 @@ class StageManager:
             else:
                 obj_new = StageManager._make_cube_no_undo("Cube", size=2.0)
             obj_new.modifiers.clear()
+            if props.current_stage == 5:
+                # 復習：すでに付いているベベル（セグメント1）を調整する課題
+                bev = obj_new.modifiers.new("Bevel", 'BEVEL')
+                bev.segments = 1
+                bev.width = 0.1
 
         elif ch == 5:
             StageManager._clear_scene_no_undo()
@@ -704,6 +760,14 @@ class StageManager:
             if cube is None:
                 StageManager._clear_scene_no_undo()
                 StageManager._make_cube_no_undo("Cube", size=2.0)
+            # 画像テクスチャ用の画像を読み込み済みにしておく（ファイルブラウザを使わせない）
+            try:
+                img_path = StageManager._find_reference_image_path(REFERENCE_IMAGE_FILENAME)
+                if img_path:
+                    img = bpy.data.images.load(img_path, check_existing=True)
+                    img.use_fake_user = True
+            except Exception as e:
+                print(f"[Tutorial] 画像の読み込みに失敗: {e}")
             space = StageManager.get_view3d_space(context)
             if space:
                 space.shading.type = 'MATERIAL'
@@ -1124,6 +1188,15 @@ class StageManager:
                                "     1：単純な面取り\n"
                                "     3以上：なめらかな丸み",
                 },
+                5: {
+                    "title": "第4章: モディファイアー",
+                    "name": "ステージ5: ベベルを調整しよう（復習）",
+                    "description": "ベベルの丸みをなめらかにしてください（セグメントを3以上に）",
+                    "details": "① キューブにベベルがすでに付いています\n"
+                               "② 右のプロパティパネルのレンチアイコンを開く\n"
+                               "③ ベベルの「セグメント」の数字を 3 以上にする\n"
+                               "   → 角がなめらかな丸みになる",
+                },
             }
             return stages.get(stage_num, {})
 
@@ -1179,6 +1252,16 @@ class StageManager:
                                "③ 好きな数字を入力（例: 2 で2倍）\n"
                                "④ Enter で確定\n"
                                "   （軸固定: S → X/Y/Z → 数字 → Enter）",
+                },
+                5: {
+                    "title": "第1章: 基本操作",
+                    "name": "ステージ5: 元に戻そう（復習）",
+                    "description": "回転とスケールが変わったキューブを、元の状態（回転0°・スケール1）に戻してください",
+                    "details": "① 今のキューブは 回転 X・Y・Z=45°、スケール 3 になっています\n"
+                               "② 回転をすべて 0° に戻す\n"
+                               "   （R → 軸 → 角度、または N キーのサイドバーで数値を直接入力）\n"
+                               "③ スケールをすべて 1 に戻す\n"
+                               "   （S → 数字、または N キーのサイドバーで数値を直接入力）",
                 },
             }
             return stages.get(stage_num, {})
@@ -1276,6 +1359,13 @@ class StageManager:
                                "   黄色い線が出る\n"
                                "③ 1回クリックで位置を確定\n"
                                "④ もう1回クリックで確定（または Enter）"},
+                10: {"title": "第3章: モデリング基礎", "name": "ステージ10: 組み合わせ（復習）",
+                     "description": "立方体を追加し、ループカットを1本入れて、サイズを2倍にしてください",
+                     "details": "① Shift+A → メッシュ → 立方体\n"
+                                "② Tab でエディットモードへ\n"
+                                "③ Ctrl+R でループカットを1本入れる\n"
+                                "④ Tab でオブジェクトモードに戻る\n"
+                                "⑤ S → 2 → Enter でサイズを2倍にする"},
             }
             return stages.get(stage_num, {})
         if chapter_num == 5:
@@ -1349,10 +1439,9 @@ class StageManager:
                                "   Shift+A を押す\n"
                                "③ 「テクスチャ」→「画像テクスチャ」を選択\n"
                                "   ノードが追加される\n"
-                               "④ ノードの「開く」ボタンをクリック\n"
-                               "⑤ ファイルブラウザが開くので\n"
-                               "   「23DB000」フォルダの中の\n"
-                               "   画像ファイルを選んで「画像を開く」",
+                               "④ ノードの画像欄（画像アイコンの▼）を開く\n"
+                               "⑤ 一覧から「fruit_apple」を選ぶ\n"
+                               "   （「開く」ボタンは使いません）",
                 },
                 4: {
                     "title": "第6章: マテリアルノード",
@@ -1458,6 +1547,28 @@ class StageManager:
                     "Enter で確定。S → X → 2 → Enter でX軸だけ2倍にもできます",
                 ]
 
+            if st == 5:
+                if not obj or obj.name != "Cube":
+                    return False, "❌ キューブを選択してください", "NO_ACTIVE_CUBE", [
+                        "3Dビューのキューブをクリックして選択してください",
+                        "回転とスケールの数値を元に戻します",
+                        "N キーで出るサイドバーの「アイテム」に数値があります",
+                    ]
+                rot_ok = all(abs(((math.degrees(a) + 180.0) % 360.0) - 180.0) < 2.0 for a in obj.rotation_euler)
+                scale_ok = all(abs(v - 1.0) < 0.05 for v in obj.scale)
+                if rot_ok and scale_ok:
+                    return True, "✓ 元の状態に戻せました", "OK", []
+                msg = []
+                if not scale_ok:
+                    msg.append(f"スケール {obj.scale.x:.2f}/{obj.scale.y:.2f}/{obj.scale.z:.2f}")
+                if not rot_ok:
+                    msg.append("回転が0°ではありません")
+                return False, "❌ まだ元の状態ではありません（" + "、".join(msg) + "）", "NOT_RESTORED", [
+                    "S を押して数字を入力すると、その倍率になります（2なら2倍）。3倍に大きくなったものを小さくするには何倍にすればよいでしょう？",
+                    "角度は R → 軸 → 数字 以外の方法もあります。N キーで出るサイドバーの「アイテム」に、数値が出ています。そこを直接書き換えてみよう",
+                    "回転は X・Y・Z すべてを 0° に、スケールは X・Y・Z すべてを 1 にします",
+                ]
+
         # ---- Chapter 2 ----
         if ch == 2:
             space = StageManager.get_view3d_space(context)
@@ -1539,6 +1650,46 @@ class StageManager:
                     "キーボードの X キーまたは Delete キーを押してください",
                     "確認メニューが出たら「削除」をクリックして確定します",
                 ]
+
+            # --- St10: 組み合わせ（復習）追加→ループカット→2倍（編集モードに依存しないので先に判定）---
+            if st == 10:
+                meshes = [o for o in bpy.data.objects if o.type == 'MESH']
+                if not meshes:
+                    return False, "❌ まず立方体を追加してください", "NO_OBJECT_ADDED", [
+                        "Shift+A → メッシュ → 立方体 で追加します",
+                        "追加したら Tab でエディットモードに入り、Ctrl+R でループカットを1本入れます",
+                        "最後に Tab でオブジェクトモードに戻り、S → 2 → Enter で2倍にします",
+                    ]
+                if len(meshes) > 1:
+                    return False, "❌ 立方体は1つだけにしてください", "TOO_MANY_OBJECTS", [
+                        "余分なオブジェクトは X キーで削除してください",
+                        "立方体を1つだけ追加して進めます",
+                        "やり直すときは「リセット」ボタンが使えます",
+                    ]
+                target = meshes[0]
+                if target.mode == 'EDIT':
+                    coords = [tuple(v.co) for v in bmesh.from_edit_mesh(target.data).verts]
+                else:
+                    coords = [tuple(v.co) for v in target.data.vertices]
+                distinct = len({(round(x, 3), round(y, 3), round(z, 3)) for x, y, z in coords})
+                xs = [c[0] for c in coords]
+                ys = [c[1] for c in coords]
+                zs = [c[2] for c in coords]
+                sx, sy, sz = (abs(v) for v in target.scale)
+                dims = ((max(xs) - min(xs)) * sx, (max(ys) - min(ys)) * sy, (max(zs) - min(zs)) * sz)
+                if not (12 <= distinct <= 20):
+                    return False, "❌ ループカットが入っていません", "LOOPCUT_NOT_DETECTED", [
+                        "Tab でエディットモードに入ってください",
+                        "Ctrl+R を押して、黄色い線が出たらクリックで確定します",
+                        "（もう1回クリックまたは Enter で最終確定）",
+                    ]
+                if not all(abs(d - 4.0) <= 0.4 for d in dims):
+                    return False, "❌ サイズが2倍になっていません", "NOT_SCALED", [
+                        "追加した立方体の1辺は2です。2倍にすると4になります",
+                        "オブジェクトモードで S → 2 → Enter を押してください",
+                        "（エディットモードのまま S → 2 でも同じ結果になります）",
+                    ]
+                return True, "✓ 追加・ループカット・拡大ができました", "OK", []
 
             # --- St4〜: 旧St1〜6 (エディットモード〜ループカット) ---
             if st == 4:
@@ -1661,6 +1812,21 @@ class StageManager:
                     "レンチアイコン→「生成」→「ソリッド化」を選んでください",
                     "追加後に「幅」の値を変えると厚さが変わります",
                 ]
+            if st == 5:
+                bev = [m for m in obj.modifiers if m.type == 'BEVEL']
+                if bev and bev[0].segments >= 3 and bev[0].width >= 0.02:
+                    return True, "✓ ベベルがなめらかな丸みになりました", "OK", []
+                if bev:
+                    return False, f"❌ セグメントが {bev[0].segments} です（3以上にしてください）", "BEVEL_NOT_SMOOTH", [
+                        "右のプロパティパネルのレンチアイコンを開いてください",
+                        "ベベルの「セグメント」の数字を増やしてください",
+                        "3以上にすると、角がなめらかな丸みになります",
+                    ]
+                return False, "❌ ベベルが見つかりません", "NO_MODIFIER", [
+                    "リセットボタンで最初の状態に戻せます",
+                    "または「モディファイアーを追加」→「生成」→「ベベル」で追加します",
+                    "そのあと「セグメント」を3以上にしてください",
+                ]
             if st == 4:
                 if any(m.type == 'BEVEL' for m in obj.modifiers):
                     return True, "✓ ベベルを追加しました", "OK", []
@@ -1760,8 +1926,8 @@ class StageManager:
                     return True, "✓ 画像テクスチャをロードしました", "OK", []
                 return False, "❌ 画像テクスチャをロードしてください", "NO_IMAGE_TEXTURE", [
                     "シェーダーエディター内で Shift+A → テクスチャ → 画像テクスチャを選んでください",
-                    "追加されたノードの「開く」ボタンをクリックしてください",
-                    "「23DB000」フォルダの中の画像ファイルを選んで「画像を開く」してください",
+                    "追加されたノードの画像欄（画像アイコンの▼）をクリックしてください",
+                    "一覧から「fruit_apple」を選んでください（「開く」ボタンは使いません）",
                 ]
             if st == 4:
                 if obj and StageManager.check_correct_node_link(obj):
@@ -1952,17 +2118,19 @@ class TUTORIAL_PG_Properties(PropertyGroup):
     stage_runs: CollectionProperty(type=StageRun)
     current_stall_seconds: FloatProperty(default=0.0, min=0.0)
 
-    # 難易度設定（セッション開始前に実験者が設定）
+    # 難易度設定（参加者が自分に合うものを選ぶ。ログに記録される）
     difficulty_mode: EnumProperty(
         name="難易度",
-        description="ヒントの表示量を制御します",
+        description="手順とヒントの表示量を変えます",
         items=[
-            ('EASY',   "かんたん",   "最初からすべてのヒントを表示"),
-            ('NORMAL', "ふつう",     "失敗するたびにヒントを段階的に表示（デフォルト）"),
-            ('HARD',   "むずかしい", "ヒントを表示しない"),
+            ('EASY',   "かんたん",   "手順をすべて表示。ヒントも最初から全部表示"),
+            ('NORMAL', "ふつう",     "ショートカットだけ表示。手順は「手順を見る」ボタンで開く。失敗するたびヒントを1つずつ表示（デフォルト）"),
+            ('HARD',   "むずかしい", "機能の説明だけ表示（ショートカットも手順もなし）。ヒントも出さない"),
         ],
         default='NORMAL',
     )
+    # 「手順を見る」を開いたステージ（"章-ステージ"）。開いていなければ空
+    steps_open_key: StringProperty(default="")
 
     # Logging
     enable_participant_logging: BoolProperty(default=True)
@@ -2092,7 +2260,7 @@ class TUTORIAL_OT_export_stage_summary_csv(Operator):
         by_stage = {}
         for ev in events:
             ev_type = ev.get("event")
-            if ev_type not in ("validate", "finalize"):
+            if ev_type not in ("validate", "finalize", "steps_opened"):
                 continue
             ch = ev.get("chapter")
             st = ev.get("stage")
@@ -2107,8 +2275,12 @@ class TUTORIAL_OT_export_stage_summary_csv(Operator):
                     "time_to_first_attempt_s": None, "time_to_success_s": None,
                     "reason_sequence": None,
                     "undo_count": None, "survey_difficulty": None,
-                    "difficulty_mode": None,
+                    "difficulty_mode": None, "steps_opened": 0,
                 }
+            if ev_type == "steps_opened":
+                by_stage[key]["steps_opened"] += 1
+                if ev.get("difficulty_mode") is not None and by_stage[key]["difficulty_mode"] is None:
+                    by_stage[key]["difficulty_mode"] = str(ev["difficulty_mode"])
             if ev_type == "validate" and ev.get("ok") is False and not ev.get("auto"):
                 by_stage[key]["failures"] += 1
             if ev_type == "finalize":
@@ -2152,6 +2324,7 @@ class TUTORIAL_OT_export_stage_summary_csv(Operator):
                     "completed", "hint_level", "setup_count",
                     "time_to_first_attempt_s", "time_to_success_s",
                     "undo_count", "survey_difficulty", "difficulty_mode", "reason_sequence",
+                    "steps_opened",
                 ])
                 for key in sorted(by_stage.keys()):
                     r = by_stage[key]
@@ -2169,6 +2342,7 @@ class TUTORIAL_OT_export_stage_summary_csv(Operator):
                         _fmt_any(r["survey_difficulty"]),
                         _fmt_any(r["difficulty_mode"]),
                         _fmt_any(r["reason_sequence"]),
+                        r["steps_opened"],
                     ])
         except Exception as e:
             self.report({'ERROR'}, f"CSV出力に失敗: {e}")
@@ -2176,6 +2350,29 @@ class TUTORIAL_OT_export_stage_summary_csv(Operator):
 
         self.report({'INFO'}, f"CSV出力完了: {out_csv}")
         return {'FINISHED'}
+
+class TUTORIAL_OT_toggle_steps(Operator):
+    bl_idname = "tutorial.toggle_steps"
+    bl_label = "手順を見る"
+    bl_description = "このステージの手順を開く／閉じる（開いた回数がログに記録されます）"
+
+    def execute(self, context):
+        props = context.scene.tutorial_props
+        key = f"{props.current_chapter}-{props.current_stage}"
+        if props.steps_open_key == key:
+            props.steps_open_key = ""
+            return {'FINISHED'}
+        props.steps_open_key = key
+        StageManager.append_participant_event(context, {
+            "t": StageManager._now(),
+            "participant_id": StageManager._safe_participant_id(props.participant_id),
+            "event": "steps_opened",
+            "chapter": props.current_chapter,
+            "stage": props.current_stage,
+            "difficulty_mode": props.difficulty_mode,
+        })
+        return {'FINISHED'}
+
 
 class TUTORIAL_OT_render_and_mark_saved(Operator):
     bl_idname = "tutorial.render_and_mark_saved"
@@ -2347,7 +2544,7 @@ class TUTORIAL_OT_next_stage(Operator):
 
     def invoke(self, context, event):
         props = context.scene.tutorial_props
-        max_stages_per_chapter = {1: 4, 2: 4, 3: 9, 4: 4, 5: 4, 6: 5, 7: 1, 8: 6}
+        max_stages_per_chapter = MAX_STAGES
         max_stages = max_stages_per_chapter.get(props.current_chapter, 1)
         # Ch7 最終ステージ → Ch8 への移行はカスタムダイアログ
         going_to_ch8 = (
@@ -2371,7 +2568,7 @@ class TUTORIAL_OT_next_stage(Operator):
         props = context.scene.tutorial_props
         StageManager.finalize_current_run(context, completed=True)
 
-        max_stages_per_chapter = {1: 4, 2: 4, 3: 9, 4: 4, 5: 4, 6: 5, 7: 1, 8: 6}
+        max_stages_per_chapter = MAX_STAGES
         max_stages = max_stages_per_chapter.get(props.current_chapter, 1)
 
         if props.current_stage < max_stages:
@@ -2520,7 +2717,7 @@ class TUTORIAL_OT_stage_prev(Operator):
 
     def execute(self, context):
         props = context.scene.tutorial_props
-        max_stages_per_chapter = {1: 4, 2: 4, 3: 9, 4: 4, 5: 4, 6: 5, 7: 1, 8: 6}
+        max_stages_per_chapter = MAX_STAGES
 
         from_ch, from_st = props.current_chapter, props.current_stage
         StageManager.finalize_current_run(context, completed=False)
@@ -2579,7 +2776,7 @@ class TUTORIAL_OT_stage_next_free(Operator):
 
     def execute(self, context):
         props = context.scene.tutorial_props
-        max_stages_per_chapter = {1: 4, 2: 4, 3: 9, 4: 4, 5: 4, 6: 5, 7: 1, 8: 6}
+        max_stages_per_chapter = MAX_STAGES
         max_stages = max_stages_per_chapter.get(props.current_chapter, 1)
 
         from_ch, from_st = props.current_chapter, props.current_stage
@@ -2758,13 +2955,32 @@ class TUTORIAL_PT_main(Panel):
         info = StageManager.get_stage_info(props.current_chapter, props.current_stage)
         sbox = layout.box()
         sbox.label(text=info.get("title", ""))
-        max_stages_per_chapter = {1: 4, 2: 4, 3: 9, 4: 4, 5: 4, 6: 5, 7: 1, 8: 6}
+        max_stages_per_chapter = MAX_STAGES
         sbox.label(text=f"ステージ {props.current_stage}/{max_stages_per_chapter.get(props.current_chapter, 1)}")
         sbox.label(text=info.get("name", ""))
         sbox.separator()
         sbox.label(text=info.get("description", ""))
 
-        if info.get("details"):
+        ch_now, st_now = props.current_chapter, props.current_stage
+        guided = ch_now in (1, 2, 3, 4, 5, 6)
+        mode = props.difficulty_mode
+        if guided and mode != 'EASY':
+            # ふつう／むずかしい：手順の全文は出さず、機能の説明を表示
+            about = STAGE_ABOUT.get((ch_now, st_now), "")
+            if about:
+                sbox.separator()
+                for line in about.split("\n"):
+                    sbox.label(text=line)
+            if mode == 'NORMAL':
+                opened = (props.steps_open_key == f"{ch_now}-{st_now}")
+                sbox.separator()
+                sbox.operator("tutorial.toggle_steps",
+                              text="手順をとじる" if opened else "手順を見る（ヒント）",
+                              icon='TRIA_UP' if opened else 'TRIA_DOWN')
+                if opened and info.get("details"):
+                    for line in info["details"].split("\n"):
+                        sbox.label(text=line)
+        elif info.get("details"):
             sbox.separator()
             for line in info["details"].split("\n"):
                 sbox.label(text=line)
@@ -2851,7 +3067,9 @@ class TUTORIAL_PT_main(Panel):
         current_new, _ = StageManager.get_accumulated_shortcuts(
             props.current_chapter, props.current_stage
         )
-        if current_new:
+        # むずかしい：ショートカットは出さない（モディファイアーはメニューの道筋なので出す）
+        show_keys = (props.difficulty_mode != 'HARD') or (props.current_chapter == 4)
+        if current_new and show_keys:
             nbox = layout.box()
             nbox.label(text="★ 今回のショートカット", icon='KEYINGSET')
             for action, keys in current_new:
@@ -2917,6 +3135,11 @@ class TUTORIAL_PT_shortcuts(Panel):
     bl_parent_id = "TUTORIAL_PT_main"
     bl_options = {'DEFAULT_CLOSED'}
 
+    @classmethod
+    def poll(cls, context):
+        # むずかしい：累積のショートカット一覧も出さない
+        return context.scene.tutorial_props.difficulty_mode != 'HARD'
+
     def draw(self, context):
         layout = self.layout
         props = context.scene.tutorial_props
@@ -2981,6 +3204,7 @@ classes = (
     TUTORIAL_OT_confirm_all_chapters,
     TUTORIAL_OT_export_stage_summary_csv,
     TUTORIAL_OT_render_and_mark_saved,
+    TUTORIAL_OT_toggle_steps,
     TUTORIAL_OT_finish_and_turn_off,
     TUTORIAL_OT_setup_stage,
     TUTORIAL_OT_validate_stage,
