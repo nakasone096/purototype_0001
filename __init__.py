@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 9, 2),
+    "version": (0, 9, 3),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -1332,12 +1332,13 @@ class StageManager:
                     "details": "① Shift+A を押す\n"
                                "② メッシュ → 立方体（または好きなもの）を選択"},
                 2: {"title": "第3章: オブジェクト操作", "name": "ステージ2: 元に戻す",
-                    "description": "キューブを動かしてから、Ctrl+Z で元に戻してください",
-                    "details": "① キューブをクリックで選び、何か1つ操作する\n"
-                               "   ・G → X → 3 → Enter で動かす\n"
-                               "   ・S → 2 → Enter で大きさを変える、R で回す でもOK\n"
-                               "② Ctrl+Z を押して、元の状態に戻してみよう\n"
-                               "③ 押すと自動でクリアになります（反応しないときは「確認」ボタン）"},
+                    "description": "キューブを好きなように動かしてから、Ctrl+Z で取り消してください",
+                    "details": "① キューブをクリックで選ぶ\n"
+                               "② G を押して、マウスで好きな向きに動かし、クリックで確定\n"
+                               "   （向きも量も自由。G → Z のように軸を決めてもOK）\n"
+                               "   大きさを変える（S）、回す（R）でもOK\n"
+                               "③ Ctrl+Z を押して、取り消してみよう\n"
+                               "④ 取り消せたらクリア（反応しないときは「確認」ボタン）"},
                 3: {"title": "第3章: オブジェクト操作", "name": "ステージ3: 削除",
                     "description": "オブジェクトを削除してください",
                     "details": "① オブジェクトをクリックして選択\n"
@@ -1662,12 +1663,12 @@ class StageManager:
                     return True, "✓ 操作を Ctrl+Z で元に戻せました", "OK", []
                 if acted <= 0.0:
                     return False, "❌ まずキューブを動かしてください", "NO_ACTION_YET", [
-                        "キューブを左クリックで選び、G → X → 3 → Enter で動かしてみましょう",
-                        "動かす代わりに、S で大きさを変える・R で回す でもOKです",
-                        "操作したあとで Ctrl+Z を押すと、元に戻ります",
+                        "キューブを左クリックで選んでください",
+                        "G を押してマウスを動かし、クリックで確定します（向きも量も自由です）",
+                        "動かす代わりに、S（大きさ）や R（回転）でもOKです。操作したあとで Ctrl+Z を押すと取り消せます",
                     ]
                 return False, "❌ まだ Ctrl+Z が押されていません", "UNDO_NOT_USED", [
-                    "キューブを動かせました。次は Ctrl+Z を押してください",
+                    "操作できました。次は Ctrl+Z を押してください",
                     "直前の操作が取り消されて、元の状態に戻ります",
                     "（マウスを3Dビューの上に置いて押してください）",
                 ]
@@ -3230,6 +3231,23 @@ class TUTORIAL_PT_shortcuts(Panel):
 # =====================================================
 
 @bpy.app.handlers.persistent
+def _tutorial_st2_watch(*args):
+    """Ch3 St2: キューブを動かした／形を変えたのを、シーンが更新されたときに検出して記録する。
+    Ctrl+Z で元に戻ると変化は消えるので、監視（タイマー）に頼らず、更新のたびに見る。"""
+    try:
+        if StageManager._st2_action_t > 0.0 or StageManager._st_enter_t <= 0.0:
+            return
+        scene = bpy.context.scene
+        props = getattr(scene, "tutorial_props", None)
+        if props is None or props.current_chapter != 3 or props.current_stage != 2:
+            return
+        if StageManager.cube_modified():
+            StageManager._st2_action_t = StageManager._rel()
+    except Exception:
+        pass
+
+
+@bpy.app.handlers.persistent
 def _tutorial_undo_handler(*args):
     """Ctrl+Z 検出: 監視中のみカウント＆ログ記録"""
     try:
@@ -3291,10 +3309,14 @@ def register():
     bpy.types.Scene.tutorial_props = bpy.props.PointerProperty(type=TUTORIAL_PG_Properties)
     if _tutorial_undo_handler not in bpy.app.handlers.undo_post:
         bpy.app.handlers.undo_post.append(_tutorial_undo_handler)
+    if _tutorial_st2_watch not in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(_tutorial_st2_watch)
 
 def unregister():
     if _tutorial_undo_handler in bpy.app.handlers.undo_post:
         bpy.app.handlers.undo_post.remove(_tutorial_undo_handler)
+    if _tutorial_st2_watch in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(_tutorial_st2_watch)
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
     del bpy.types.Scene.tutorial_props
