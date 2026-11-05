@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 9, 4),
+    "version": (0, 9, 5),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -44,6 +44,9 @@ REFERENCE_IMAGE_DISPLAY_SIZE  = 2.0
 # 各チャプターのステージ数（Ch1・Ch3・Ch4の末尾は「復習」ステージ）
 MAX_STAGES = {1: 5, 2: 4, 3: 10, 4: 5, 5: 4, 6: 5, 7: 1, 8: 6}
 
+# Ch4 ミラー課題で最初に置く「半分の箱」の頂点（Y=0 の面は開いている）
+HALF_BOX_VERTS = [(x, y, z) for x in (-1.0, 1.0) for y in (0.0, 1.0) for z in (-1.0, 1.0)]
+
 # =====================================================
 # SHORTCUT TABLE
 # (intro_ch, intro_st, section, action, keys)
@@ -57,6 +60,7 @@ SHORTCUT_TABLE = [
     (1, 1, "基本操作", "キャンセル",         "右クリック / Esc"),
     (1, 2, "基本操作", "移動",              "G"),
     (1, 2, "基本操作", "軸固定移動",         "G → X/Y/Z → 数字 → Enter"),
+    (1, 2, "基本操作", "数値を直接入力",      "N キー →「アイテム」／プロパティ →「オブジェクト」"),
     (1, 3, "基本操作", "回転",              "R"),
     (1, 3, "基本操作", "軸固定回転",         "R → X/Y/Z → 角度 → Enter"),
     (1, 4, "基本操作", "拡大縮小",           "S → 数字 → Enter"),
@@ -80,7 +84,9 @@ SHORTCUT_TABLE = [
     (4, 1, "モディファイアー", "モディファイアー追加", "プロパティ → レンチアイコン → 追加"),
     (4, 1, "モディファイアー", "適用",               "モディファイアー → 適用"),
     (4, 2, "モディファイアー", "ミラー",             "レンチ → 追加 → 生成 → ミラー"),
+    (4, 2, "モディファイアー", "頂点を動かす（編集）",  "Tab → 頂点を選ぶ → G"),
     (4, 3, "モディファイアー", "ソリッド化",          "レンチ → 追加 → 生成 → ソリッド化"),
+    (4, 3, "モディファイアー", "重ねる",             "もう一度 追加（上から順に効く）"),
     (4, 4, "モディファイアー", "ベベル",             "レンチ → 追加 → 生成 → ベベル"),
     (4, 5, "モディファイアー", "ベベルの調整",        "パネルの「量」「セグメント」の数値"),
     # --- Ch5: スカルプト ---
@@ -96,10 +102,10 @@ SHORTCUT_TABLE = [
 # 難易度「ふつう」「むずかしい」で、手順の全文の代わりに表示する機能の説明
 STAGE_ABOUT = {
     (1, 1): "選択とは\n  操作するオブジェクトを決めること\n  選んだものだけが動く・変わる",
-    (1, 2): "移動とは\n  オブジェクトの位置を変えること\n  X・Y・Zの軸ごとに動かせる",
-    (1, 3): "回転とは\n  オブジェクトの向きを変えること\n  軸を決めて角度で回す",
-    (1, 4): "拡大縮小（スケール）とは\n  オブジェクトの大きさを変えること\n  倍率で指定する（2なら2倍）",
-    (1, 5): "復習：変えた形を元に戻そう\n  回転0°・スケール1が元の状態\n  数値を見つけて直すこともできる",
+    (1, 2): "移動とは\n  オブジェクトの位置を変えること\n  X・Y・Zの軸ごとに動かせる\n  数値を直接入力してもOK（Nキー）",
+    (1, 3): "回転とは\n  オブジェクトの向きを変えること\n  軸を決めて角度で回す\n  数値を直接入力してもOK（Nキー）",
+    (1, 4): "拡大縮小（スケール）とは\n  オブジェクトの大きさを変えること\n  倍率で指定する（2なら2倍）\n  数値を直接入力してもOK（Nキー）",
+    (1, 5): "復習：変えた形を元に戻そう\n  回転0°・スケール1が元の状態\n  Nキーの数値を直してもOK",
     (2, 1): "パンとは\n  視点を上下左右に平行移動すること\n  オブジェクト自体は動かない",
     (2, 2): "ズームとは\n  視点を近づけたり遠ざけたりすること",
     (2, 3): "ビュー回転とは\n  視点をぐるりと回すこと\n  裏側も見られる",
@@ -113,11 +119,11 @@ STAGE_ABOUT = {
     (3, 7): "フェース（面）とは\n  辺で囲まれた平らな部分のこと",
     (3, 8): "押し出し（エクストルード）とは\n  選んだ面を外に伸ばして\n  出っ張りをつくる機能",
     (3, 9): "ループカットとは\n  メッシュをぐるっと一周切って\n  新しい辺のループを足す機能",
-    (3, 10): "復習：ここまでの組み合わせ\n  追加 → ループカット → 2倍に拡大\n  順番は自分で考えよう",
-    (4, 1): "サブディビジョンサーフェスとは\n  面を細かく分けて\n  形をなめらかにする機能",
-    (4, 2): "ミラーとは\n  片側の形を反対側にも映して\n  左右対称にする機能",
-    (4, 3): "ソリッド化とは\n  面に厚みをつける機能",
-    (4, 4): "ベベルとは\n  角を丸める（面取りする）機能\n  量＝大きさ／セグメント＝なめらかさ",
+    (3, 10): "復習：ここまでの組み合わせ\n  追加 → ループカット → 切れ目を広げる\n  ふくらんだ形になる",
+    (4, 1): "サブディビジョンサーフェスとは\n  面を細かく分けてなめらかにする機能\n・ビューポートのレベル数\n  画面での細かさ（大きいほど重い）\n・レンダー\n  レンダリング時の細かさ\n・適用\n  モディファイアーを実際の形にする",
+    (4, 2): "ミラーとは\n  片側の形を反対側にも映す機能\n・座標軸\n  どの軸を境に映すか（X/Y/Z）\n・二分割\n  境界を越えた部分を切り取る\n・ミラーオブジェクト\n  基準にする物体（空なら自分）\n・マージ\n  つなぎ目の頂点をくっつける",
+    (4, 3): "ソリッド化とは\n  面に厚みをつける機能\n・幅\n  厚さの量（大きいほど厚い）\n・オフセット（-1〜1）\n  厚みの向き（-1内側／0中央／1外側）\n  モディファイアーは重ねがけできる",
+    (4, 4): "ベベルとは\n  角を丸める（面取りする）機能\n・量\n  丸みの大きさ\n・セグメント\n  丸みの分割数（多いほど滑らか）",
     (4, 5): "復習：ベベルの数値を調整しよう\n  セグメントを増やすほど\n  角がなめらかな丸みになる",
     (5, 1): "スカルプトモードとは\n  粘土をこねるように形を変えるモード",
     (5, 2): "Drawブラシとは\n  表面を盛り上げるブラシ\n  Ctrlを押すと凹ませられる",
@@ -666,6 +672,34 @@ class StageManager:
     # Scene reset (shared by setup_stage, validate on fail, next_stage)
     # -----------------------------
     @staticmethod
+    def _make_half_box_no_undo(name="Cube"):
+        """Y>=0 の半分だけの箱をアンドゥなしで作成して返す（ミラーの課題用。Y=0 の面は開いている）"""
+        mesh = bpy.data.meshes.new(name)
+        bm = bmesh.new()
+        vs = [bm.verts.new(v) for v in HALF_BOX_VERTS]
+
+        def vi(xi, yi, zi):
+            return vs[xi * 4 + yi * 2 + zi]
+
+        for quad in (
+            (vi(0, 1, 0), vi(1, 1, 0), vi(1, 1, 1), vi(0, 1, 1)),   # 奥（Y=1）
+            (vi(0, 0, 0), vi(0, 1, 0), vi(1, 1, 0), vi(1, 0, 0)),   # 下
+            (vi(0, 0, 1), vi(1, 0, 1), vi(1, 1, 1), vi(0, 1, 1)),   # 上
+            (vi(0, 0, 0), vi(0, 0, 1), vi(0, 1, 1), vi(0, 1, 0)),   # 左
+            (vi(1, 0, 0), vi(1, 1, 0), vi(1, 1, 1), vi(1, 0, 1)),   # 右
+        ):
+            bm.faces.new(quad)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+        bm.to_mesh(mesh)
+        bm.free()
+        obj = bpy.data.objects.new(name, mesh)
+        bpy.context.collection.objects.link(obj)
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        bpy.context.view_layer.update()
+        return obj
+
+    @staticmethod
     def reset_scene_for_chapter(context):
         """シーンオブジェクトのみリセット。bpy.data 直接操作でアンドゥスタックに積まない。"""
         props = context.scene.tutorial_props
@@ -748,6 +782,8 @@ class StageManager:
             StageManager._clear_scene_no_undo()
             if props.current_stage == 3:
                 obj_new = StageManager._make_torus_no_undo("Torus")
+            elif props.current_stage == 2:
+                obj_new = StageManager._make_half_box_no_undo("Cube")
             else:
                 obj_new = StageManager._make_cube_no_undo("Cube", size=2.0)
             obj_new.modifiers.clear()
@@ -1144,12 +1180,14 @@ class StageManager:
                 1: {
                     "title": "第4章: モディファイアー",
                     "name": "ステージ1: サブディビジョンサーフェス",
-                    "description": "Subdivision Surface を追加してください",
+                    "description": "Subdivision Surface を追加し、レベル数を2以上にして、適用してください",
                     "details": "① 右のプロパティパネルで\n"
                                "   青いレンチアイコン（モディファイアー）を開く\n"
                                "② 「モディファイアーを追加」\n"
                                "   →「生成」→「サブディビジョンサーフェス」\n"
-                               "③ 追加したら数値を確認しよう\n"
+                               "③ 「ビューポートのレベル数」を 2 にする\n"
+                               "④ モディファイアー右上の▼ →「適用」（Ctrl+A）\n"
+                               "   → 実際の形として確定する\n"
                                "\n"
                                "   ・ビューポートのレベル数「2」\n"
                                "     3Dビュー上での分割数\n"
@@ -1162,25 +1200,30 @@ class StageManager:
                 2: {
                     "title": "第4章: モディファイアー",
                     "name": "ステージ2: ミラー",
-                    "description": "Mirror モディファイアーを追加してください（Y軸）",
-                    "details": "① キューブを選択してエディットモードへ（Tab）\n"
-                               "② Ctrl+R でキューブ中心に縦にループカットを入れる\n"
-                               "   （黄色い線が出たら1回クリック→もう1回クリックで確定）\n"
-                               "③ Y座標が負の側の頂点4つをボックス選択\n"
-                               "④ X キー →「頂点」で削除\n"
-                               "⑤ Tab でオブジェクトモードに戻る\n"
-                               "⑥ モディファイアーを追加 →「生成」→「ミラー」\n"
-                               "⑦ 「座標軸」を「Y」に変更する\n"
-                               "   → 削除した側が自動で補完される！",
+                    "description": "半分の形にミラー（Y軸）を足し、片側を編集して反対側も変わるのを確かめてください",
+                    "details": "① 半分だけのオブジェクトが置かれています\n"
+                               "② モディファイアーを追加 →「生成」→「ミラー」\n"
+                               "③ 「座標軸」の「Y」をONにする（Xははずしてもよい）\n"
+                               "   → 反対側が自動で現れて、つながった形になる\n"
+                               "④ Tab でエディットモードに入り、頂点を1つ選んで G で動かす\n"
+                               "   → 反対側も同じように動くのを確かめる\n"
+                               "\n"
+                               "   ・座標軸：どの軸を境に映すか\n"
+                               "   ・二分割：境界を越えた部分を切り取る\n"
+                               "   ・ミラーオブジェクト：基準にする物体（空なら自分）\n"
+                               "   ・マージ：つなぎ目の頂点をくっつける",
                 },
                 3: {
                     "title": "第4章: モディファイアー",
                     "name": "ステージ3: ソリッド化（Solidify）",
-                    "description": "トーラスに Solidify モディファイアーを追加してください",
+                    "description": "トーラスにソリッド化を足し、幅を0.1以上にして、さらにモディファイアーを1つ重ねてください",
                     "details": "① トーラス（ドーナツ型）がセットアップされています\n"
                                "② モディファイアーを追加\n"
                                "   →「生成」→「ソリッド化」\n"
-                               "③ 数値の説明\n"
+                               "③ 「幅」を 0.1 以上にする\n"
+                               "④ もう一度「モディファイアーを追加」で、別のモディファイアー\n"
+                               "   （例：サブディビジョンサーフェス）を重ねる\n"
+                               "⑤ 数値の説明\n"
                                "\n"
                                "   ・幅\n"
                                "     面に追加される厚さの量\n"
@@ -1193,10 +1236,11 @@ class StageManager:
                 4: {
                     "title": "第4章: モディファイアー",
                     "name": "ステージ4: ベベル（Bevel）",
-                    "description": "Bevel モディファイアーを追加してください",
+                    "description": "Bevel モディファイアーを追加し、量（幅）を0.2以上にしてください",
                     "details": "① モディファイアーを追加\n"
                                "   →「生成」→「ベベル」\n"
-                               "② 数値の説明\n"
+                               "② 「量」を 0.2 以上にする\n"
+                               "③ 数値の説明\n"
                                "\n"
                                "   ・量（幅）\n"
                                "     角が丸まる大きさ\n"
@@ -1251,7 +1295,9 @@ class StageManager:
                     "details": "① キューブを選択した状態で\n"
                                "② G キーを押す（移動モード）\n"
                                "③ X キーを押す（X軸に固定）\n"
-                               "④ 2 と入力して Enter で確定",
+                               "④ 2 と入力して Enter で確定\n"
+                               "   別の方法：N キー →「アイテム」の「位置」に数値を直接入力\n"
+                               "   （右のプロパティ →「オブジェクト」→「トランスフォーム」でも同じ）",
                 },
                 3: {
                     "title": "第1章: 基本操作",
@@ -1260,7 +1306,8 @@ class StageManager:
                     "details": "① キューブを選択した状態で\n"
                                "② R キーを押す（回転モード）\n"
                                "③ X キーを押す（X軸周りに固定）\n"
-                               "④ 45 と入力して Enter で確定",
+                               "④ 45 と入力して Enter で確定\n"
+                               "   別の方法：N キー →「アイテム」の「回転」に数値を直接入力",
                 },
                 4: {
                     "title": "第1章: 基本操作",
@@ -1270,7 +1317,8 @@ class StageManager:
                                "② S キーを押す（スケールモード）\n"
                                "③ 好きな数字を入力（例: 2 で2倍）\n"
                                "④ Enter で確定\n"
-                               "   （軸固定: S → X/Y/Z → 数字 → Enter）",
+                               "   （軸固定: S → X/Y/Z → 数字 → Enter）\n"
+                               "   別の方法：N キー →「アイテム」の「スケール」に数値を直接入力",
                 },
                 5: {
                     "title": "第1章: 基本操作",
@@ -1278,9 +1326,10 @@ class StageManager:
                     "description": "回転とスケールが変わったキューブを、元の状態（回転0°・スケール1）に戻してください",
                     "details": "① 今のキューブは 回転 X・Y・Z=45°、スケール 3 になっています\n"
                                "② 回転をすべて 0° に戻す\n"
-                               "   （R → 軸 → 角度、または N キーのサイドバーで数値を直接入力）\n"
+                               "   ・N キー →「アイテム」の「回転」X・Y・Z を 0 に書き換える（かんたん）\n"
+                               "   ・R で回して戻す方法は、3軸が重なっているので難しい\n"
                                "③ スケールをすべて 1 に戻す\n"
-                               "   （S → 数字、または N キーのサイドバーで数値を直接入力）",
+                               "   ・N キーの「スケール」を 1 に書き換える、または S → 数字",
                 },
             }
             return stages.get(stage_num, {})
@@ -1382,12 +1431,14 @@ class StageManager:
                                "③ 1回クリックで位置を確定\n"
                                "④ もう1回クリックで確定（または Enter）"},
                 10: {"title": "第3章: モデリング基礎", "name": "ステージ10: 組み合わせ（復習）",
-                     "description": "立方体を追加し、ループカットを1本入れて、サイズを2倍にしてください",
+                     "description": "立方体を追加し、ループカットを1本入れて、その切れ目を外側に2倍に広げてください",
                      "details": "① Shift+A → メッシュ → 立方体\n"
                                 "② Tab でエディットモードへ\n"
                                 "③ Ctrl+R でループカットを1本入れる\n"
-                                "④ Tab でオブジェクトモードに戻る\n"
-                                "⑤ S → 2 → Enter でサイズを2倍にする"},
+                                "   （確定すると、切れ目の1周が選ばれた状態になる）\n"
+                                "④ S → 2 → Enter で、選ばれた切れ目を2倍に広げる\n"
+                                "   → ふくらんだ形になる\n"
+                                "   （立方体全体を2倍にしても合格です）"},
             }
             return stages.get(stage_num, {})
         if chapter_num == 5:
@@ -1716,11 +1767,21 @@ class StageManager:
                         "Ctrl+R を押して、黄色い線が出たらクリックで確定します",
                         "（もう1回クリックまたは Enter で最終確定）",
                     ]
-                if not all(abs(d - 4.0) <= 0.4 for d in dims):
-                    return False, "❌ サイズが2倍になっていません", "NOT_SCALED", [
-                        "追加した立方体の1辺は2です。2倍にすると4になります",
-                        "オブジェクトモードで S → 2 → Enter を押してください",
-                        "（エディットモードのまま S → 2 でも同じ結果になります）",
+                # 合格は2通り：①立方体全体が2倍 ②ループカットの切れ目1周が外側に2倍（ふくらんだ形）
+                pts = [(x * sx, y * sy, z * sz) for x, y, z in coords]
+                whole = all(abs(d - 4.0) <= 0.4 for d in dims)
+                ring = False
+                for a in range(3):
+                    rp = [p for p in pts if abs(p[a]) <= 0.15]
+                    if len(rp) >= 4 and all(
+                            abs(max(abs(p[b]) for b in range(3) if b != a) - 2.0) <= 0.3 for p in rp):
+                        ring = True
+                        break
+                if not (whole or ring):
+                    return False, "❌ 切れ目がまだ広がっていません", "NOT_SCALED", [
+                        "ループカットを入れると、切れ目の1周が選ばれた状態になります",
+                        "そのまま S → 2 → Enter を押すと、切れ目だけが2倍に広がります",
+                        "（立方体全体を2倍にしても合格です）",
                     ]
                 return True, "✓ 追加・ループカット・拡大ができました", "OK", []
 
@@ -1811,40 +1872,85 @@ class StageManager:
                     "セットアップを押すとキューブが配置されます",
                 ]
             if st == 1:
-                if any(m.type == 'SUBSURF' for m in obj.modifiers):
-                    return True, "✓ サブディビジョンサーフェスを追加しました", "OK", []
+                subs = [m for m in obj.modifiers if m.type == 'SUBSURF']
+                if subs:
+                    lv = subs[0].levels
+                    if lv < 2:
+                        return False, f"❌ ビューポートのレベル数が {lv} です（2以上にしてください）", "SUBSURF_LEVEL_LOW", [
+                            "モディファイアーパネルの「ビューポートのレベル数」を見てください",
+                            "数字を 2 にしてください（画面での細かさです）",
+                            "そのあと、右上の▼ →「適用」で形を確定します",
+                        ]
+                    return False, "❌ 次は、このモディファイアーを「適用」してください", "SUBSURF_NOT_APPLIED", [
+                        "モディファイアーの右上にある ▼ を押してください",
+                        "「適用」を選ぶと、モディファイアーが実際の形になります",
+                        "（モディファイアーにマウスを乗せて Ctrl+A でも適用できます）",
+                    ]
+                if obj.mode == 'EDIT':
+                    nverts = len(bmesh.from_edit_mesh(obj.data).verts)
+                else:
+                    nverts = len(obj.data.vertices)
+                if nverts >= 90:
+                    return True, "✓ サブディビジョンサーフェスを適用して、形を確定しました", "OK", []
+                if nverts > 8:
+                    return False, "❌ レベル数が小さいまま適用されています（2以上でやり直してください）", "SUBSURF_APPLIED_LOW", [
+                        "「リセット」で最初の状態に戻せます",
+                        "もう一度サブディビジョンサーフェスを追加して、レベル数を 2 にします",
+                        "そのあと「適用」してください",
+                    ]
                 return False, "❌ サブディビジョンサーフェスを追加してください", "NO_MODIFIER", [
                     "右のプロパティパネルのレンチアイコンを開いてください",
                     "「モディファイアーを追加」→「生成」→「サブディビジョンサーフェス」",
                     "追加すると面が細かく分割されてなめらかになります",
                 ]
             if st == 2:
-                mirror_y = any(
-                    m.type == 'MIRROR' and m.use_axis[1]
-                    for m in obj.modifiers
-                )
-                if mirror_y:
-                    return True, "✓ ミラー（Y軸）を追加しました", "OK", []
-                has_mirror = any(m.type == 'MIRROR' for m in obj.modifiers)
-                if has_mirror:
+                mirs = [m for m in obj.modifiers if m.type == 'MIRROR']
+                if not mirs:
+                    return False, "❌ ミラーモディファイアーを追加してください", "NO_MODIFIER", [
+                        "今のオブジェクトは、半分だけの形です",
+                        "レンチアイコン →「モディファイアーを追加」→「生成」→「ミラー」",
+                        "追加したら、座標軸の「Y」をONにすると、反対側が現れます",
+                    ]
+                if not any(m.use_axis[1] for m in mirs):
                     return False, "❌ ミラーの座標軸を「Y」にしてください", "MIRROR_WRONG_AXIS", [
                         "モディファイアーパネルでミラーを確認してください",
                         "「座標軸」の「Y」ボタンをクリックしてONにしてください",
                         "「X」のチェックははずしてもOKです",
                     ]
-                return False, "❌ ミラーモディファイアーを追加してください", "NO_MODIFIER", [
-                    "まずエディットモードでループカット→片側を削除してみてください",
-                    "その後レンチアイコン→「生成」→「ミラー」を追加してください",
-                    "座標軸の「Y」をONにすると削除した側が補完されます",
+                # 上位の操作：元の側（半分）の頂点を動かして、反対側も変わるのを確かめる
+                if obj.mode == 'EDIT':
+                    coords = [tuple(v.co) for v in bmesh.from_edit_mesh(obj.data).verts]
+                else:
+                    coords = [tuple(v.co) for v in obj.data.vertices]
+                moved = any(min(math.dist(c, h) for h in HALF_BOX_VERTS) > 0.05 for c in coords)
+                if moved:
+                    return True, "✓ ミラーで、片側の編集が反対側にも反映されました", "OK", []
+                return False, "❌ 次は、片側の頂点を動かして、反対側も変わるのを確かめてください", "MIRROR_NOT_EDITED", [
+                    "Tab でエディットモードに入ってください",
+                    "頂点を1つクリックで選んで、G で動かし、クリックで確定します",
+                    "動かした側と反対側が、同じように動けば成功です",
                 ]
             if st == 3:
-                if any(m.type == 'SOLIDIFY' for m in obj.modifiers):
-                    return True, "✓ ソリッド化を追加しました", "OK", []
-                return False, "❌ ソリッド化（Solidify）を追加してください", "NO_MODIFIER", [
-                    "トーラス（ドーナツ型）にモディファイアーを追加します",
-                    "レンチアイコン→「生成」→「ソリッド化」を選んでください",
-                    "追加後に「幅」の値を変えると厚さが変わります",
-                ]
+                sols = [m for m in obj.modifiers if m.type == 'SOLIDIFY']
+                if not sols:
+                    return False, "❌ ソリッド化（Solidify）を追加してください", "NO_MODIFIER", [
+                        "トーラス（ドーナツ型）にモディファイアーを追加します",
+                        "レンチアイコン→「生成」→「ソリッド化」を選んでください",
+                        "追加後に「幅」の値を変えると厚さが変わります",
+                    ]
+                if sols[0].thickness < 0.1:
+                    return False, f"❌ 幅が {sols[0].thickness:.2f} です（0.1以上にしてください）", "SOLIDIFY_THIN", [
+                        "モディファイアーパネルの「幅」を見てください",
+                        "数字を大きくすると、厚みが増えます",
+                        "0.1 以上にしてください",
+                    ]
+                if len(obj.modifiers) < 2:
+                    return False, "❌ 次は、もう1つ別のモディファイアーを重ねてください", "SOLIDIFY_NEED_STACK", [
+                        "もう一度「モディファイアーを追加」を押してください",
+                        "例：「生成」→「サブディビジョンサーフェス」",
+                        "モディファイアーは上から順に効くので、重ねると形がさらに変わります",
+                    ]
+                return True, "✓ ソリッド化の幅を調整し、モディファイアーを重ねました", "OK", []
             if st == 5:
                 bev = [m for m in obj.modifiers if m.type == 'BEVEL']
                 if bev and bev[0].segments >= 3 and bev[0].width >= 0.02:
@@ -1861,13 +1967,20 @@ class StageManager:
                     "そのあと「セグメント」を3以上にしてください",
                 ]
             if st == 4:
-                if any(m.type == 'BEVEL' for m in obj.modifiers):
-                    return True, "✓ ベベルを追加しました", "OK", []
-                return False, "❌ ベベル（Bevel）を追加してください", "NO_MODIFIER", [
-                    "右のプロパティパネルのレンチアイコンを開いてください",
-                    "「モディファイアーを追加」→「生成」→「ベベル」",
-                    "追加すると角が丸くなります",
-                ]
+                bevs = [m for m in obj.modifiers if m.type == 'BEVEL']
+                if not bevs:
+                    return False, "❌ ベベル（Bevel）を追加してください", "NO_MODIFIER", [
+                        "右のプロパティパネルのレンチアイコンを開いてください",
+                        "「モディファイアーを追加」→「生成」→「ベベル」",
+                        "追加すると角が丸くなります",
+                    ]
+                if bevs[0].width < 0.2:
+                    return False, f"❌ 量が {bevs[0].width:.2f} です（0.2以上にしてください）", "BEVEL_WIDTH_LOW", [
+                        "モディファイアーパネルの「量」を見てください",
+                        "数字を大きくすると、丸みが大きくなります",
+                        "0.2 以上にしてください",
+                    ]
+                return True, "✓ ベベルの量を調整できました", "OK", []
 
         # ---- Chapter 5: スカルプト（旧Ch4） ----
         if ch == 5:
@@ -2969,7 +3082,7 @@ class TUTORIAL_PT_main(Panel):
         props = context.scene.tutorial_props
 
         pbox = layout.box()
-        pbox.label(text="参加者ログ（DIR_PATH + 安全ボタン）")
+        pbox.label(text="参加者ログ")
         pbox.prop(props, "participant_id")
         pbox.prop(props, "log_dir")
         if not (props.log_dir or "").strip():
