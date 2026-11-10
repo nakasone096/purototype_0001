@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 9, 6),
+    "version": (0, 10, 0),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -2289,6 +2289,12 @@ class TUTORIAL_PG_Properties(PropertyGroup):
     )
     # 「手順を見る」を開いたステージ（"章-ステージ"）。開いていなければ空
     steps_open_key: StringProperty(default="")
+    # 実施者用：第7章（最終制作）と確認テスト(Ch8)を表示する。既定はオフ（学習範囲は第1〜6章）
+    show_all_chapters: BoolProperty(
+        name="全章を表示（第7章・確認テストCh8）",
+        description="オフ：学習範囲は第1〜6章だけ（実験用）。オン：第7章（最終制作）と確認テスト(Ch8)も使える",
+        default=False,
+    )
 
     # Logging
     enable_participant_logging: BoolProperty(default=True)
@@ -2511,6 +2517,35 @@ class TUTORIAL_OT_export_stage_summary_csv(Operator):
         self.report({'INFO'}, f"CSV出力完了: {out_csv}")
         return {'FINISHED'}
 
+class TUTORIAL_OT_free_practice(Operator):
+    bl_idname = "tutorial.free_practice"
+    bl_label = "練習用の立方体を用意"
+    bl_description = "判定のない練習用のシーンを用意します（「セットアップ」で今のステージに戻れます）"
+
+    def execute(self, context):
+        props = context.scene.tutorial_props
+        StageManager.finalize_current_run(context, completed=False)
+        props.monitoring_active = False        # 練習中の Ctrl+Z をステージの記録に数えない
+        props.stage_start_time = 0.0
+        props.stage_complete = False
+        try:
+            StageManager._clear_scene_no_undo()
+            StageManager._make_cube_no_undo("Cube", size=2.0)
+        except Exception as e:
+            self.report({'ERROR'}, f"練習用シーンの用意に失敗: {e}")
+            return {'CANCELLED'}
+        StageManager.append_participant_event(context, {
+            "t": StageManager._now(),
+            "participant_id": StageManager._safe_participant_id(props.participant_id),
+            "event": "free_practice_setup",
+            "chapter": props.current_chapter,
+            "stage": props.current_stage,
+            "difficulty_mode": props.difficulty_mode,
+        })
+        self.report({'INFO'}, "練習用の立方体を用意しました。自由に操作してみましょう")
+        return {'FINISHED'}
+
+
 class TUTORIAL_OT_toggle_steps(Operator):
     bl_idname = "tutorial.toggle_steps"
     bl_label = "手順を見る"
@@ -2585,34 +2620,119 @@ class TUTORIAL_OT_finish_and_turn_off(Operator):
         self.report({'INFO'}, "カメラとライトをOFFにしました（削除はしていません）")
         return {'FINISHED'}
 
+# 「画面の見方」のページ数（1ページ目は、ようこそ＋ボタンの使い方）
+TOUR_PAGES = 4
+
+
+def _tour_title(page):
+    return ("ようこそ！ 3DCGチュートリアルへ（1/%d）" % TOUR_PAGES if page == 1
+            else "画面の見方（%d/%d）" % (page, TOUR_PAGES))
+
+
+def _draw_tour_page(layout, page, first_time=False):
+    """初回ポップアップと「画面の見方を見る」ボタンの、共通の描画。"""
+    layout.label(text=_tour_title(page), icon='INFO')
+    layout.separator()
+    col = layout.column(align=True)
+    if page == 1:
+        col.label(text="ボタンの使い方：")
+        col.separator()
+        col.label(text="【セットアップ】 問題を準備します（最初に押す）")
+        col.label(text="【確認】　　　　できたら押す（答え合わせをします）")
+        col.label(text="【次へ】　　　　クリアしたら次のステージへ")
+        col.label(text="【← →】　　　ステージを自由に移動できます")
+        col.label(text="【フリー練習】　自由に練習したいとき（パネルの下の方）")
+        footer = ("OKを押すと最初のステージが始まり、続けて画面の見方（3ページ）を説明します"
+                  if first_time else "OKで次のページへ")
+    elif page == 2:
+        col.label(text="画面の構成（Blenderの初期の並び）")
+        col.separator()
+        col.label(text="・3Dビュー（中央の大きな領域）：物体を見て、操作する場所")
+        col.label(text="・アウトライナー（右上）：シーンにある物体の一覧")
+        col.label(text="・プロパティ（右下）：選んだ物体の設定（位置・回転・モディファイアーなど）")
+        col.label(text="・タイムライン（下）：アニメーション用。今回は使いません")
+        col.label(text="・一番上のバー：ファイルや編集などのメニュー")
+        col.separator()
+        col.label(text="※ 並びは環境によって違うことがあります")
+        footer = "OKで次のページへ"
+    elif page == 3:
+        col.label(text="サイドバーとツールバー")
+        col.separator()
+        col.label(text="・ツールバー（3Dビューの左端）：Tキーで出し入れ。移動・回転などのツール")
+        col.label(text="・サイドバー（3Dビューの右端）：Nキーで出し入れ")
+        col.label(text="　　「Tutorial」タブが、このチュートリアルです")
+        col.label(text="　　「アイテム」タブでは、位置・回転・スケールの数値を直接入力できます")
+        col.separator()
+        col.label(text="・キー操作は、マウスを3Dビューの上に置いてから行います")
+        footer = "OKで次のページへ"
+    else:
+        col.label(text="座標軸・原点・モード")
+        col.separator()
+        col.label(text="・座標軸の色：X＝赤、Y＝緑、Z＝青")
+        col.label(text="・3Dカーソル（赤白の丸）：新しい物体が出る場所")
+        col.label(text="・原点（オレンジの点）：物体の中心")
+        col.label(text="・モード切替（Tab）：")
+        col.label(text="　　オブジェクトモード＝物体ごと動かす")
+        col.label(text="　　編集モード＝形そのもの（頂点・辺・面）を直す")
+        col.label(text="・画面の左上に、今のモードが表示されます")
+        footer = "OKで終わります。パネルの「画面の見方を見る」でいつでも読み返せます"
+    layout.separator()
+    layout.label(text=footer)
+
+
+class TUTORIAL_OT_intro_tour(Operator):
+    bl_idname = "tutorial.intro_tour"
+    bl_label = "画面の見方を見る"
+    bl_description = "Blenderの画面の見方を、4ページのポップアップで説明します"
+
+    page: IntProperty(default=1, min=1, max=TOUR_PAGES)
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        try:
+            return wm.invoke_props_dialog(
+                self, width=560, title=_tour_title(self.page),
+                confirm_text="次へ" if self.page < TOUR_PAGES else "閉じる")
+        except TypeError:
+            return wm.invoke_props_dialog(self, width=560)
+
+    def draw(self, context):
+        _draw_tour_page(self.layout, self.page)
+
+    def execute(self, context):
+        props = context.scene.tutorial_props
+        StageManager.append_participant_event(context, {
+            "t": StageManager._now(),
+            "participant_id": StageManager._safe_participant_id(props.participant_id),
+            "event": "intro_tour",
+            "page": int(self.page),
+        })
+        if self.page < TOUR_PAGES:
+            try:
+                bpy.ops.tutorial.intro_tour('INVOKE_DEFAULT', page=self.page + 1)
+            except Exception:
+                pass
+        return {'FINISHED'}
+
+
 class TUTORIAL_OT_setup_stage(Operator):
     bl_idname = "tutorial.setup_stage"
     bl_label = "ステージセットアップ"
 
     def invoke(self, context, event):
         props = context.scene.tutorial_props
-        # 初回のみボタンの使い方ポップアップを表示する
+        # 初回のみ、ようこそ＋ボタンの使い方のポップアップを表示する（続けて画面の見方）
         if not props.intro_popup_shown:
-            return context.window_manager.invoke_props_dialog(self, width=380)
+            return context.window_manager.invoke_props_dialog(self, width=560)
         return self.execute(context)
 
     def draw(self, context):
         """初回ポップアップ用の描画（invoke_props_dialog のときだけ呼ばれる）"""
-        layout = self.layout
-        layout.label(text="ようこそ！ 3DCGチュートリアルへ", icon='INFO')
-        layout.separator()
-        layout.label(text="ボタンの使い方：")
-        layout.separator()
-        col = layout.column(align=True)
-        col.label(text="【セットアップ】 問題を準備します（最初に押す）")
-        col.label(text="【確認】　　　　できたら押す（答え合わせをします）")
-        col.label(text="【次へ】　　　　クリアしたら次のステージへ")
-        col.label(text="【← →】　　　ステージを自由に移動できます")
-        layout.separator()
-        layout.label(text="OKを押すと最初のステージが始まります！")
+        _draw_tour_page(self.layout, 1, first_time=True)
 
     def execute(self, context):
         props = context.scene.tutorial_props
+        first_time = not props.intro_popup_shown
         props.intro_popup_shown = True   # 表示済みフラグをセット
         ch = props.current_chapter
 
@@ -2654,6 +2774,11 @@ class TUTORIAL_OT_setup_stage(Operator):
 
         StageManager.log_setup_event(context)
         self.report({'INFO'}, "セットアップ完了")
+        if first_time:
+            try:
+                bpy.ops.tutorial.intro_tour('INVOKE_DEFAULT', page=2)
+            except Exception:
+                pass
         return {'FINISHED'}
 
 class TUTORIAL_OT_validate_stage(Operator):
@@ -2731,6 +2856,15 @@ class TUTORIAL_OT_next_stage(Operator):
 
         max_stages_per_chapter = MAX_STAGES
         max_stages = max_stages_per_chapter.get(props.current_chapter, 1)
+
+        # 全章表示がオフ：学習範囲は第6章まで。最後のステージで止めて、フリー練習へ案内する
+        if (not props.show_all_chapters and props.current_chapter >= 6
+                and props.current_stage >= max_stages):
+            props.stage_start_time = 0.0
+            props.last_result_ok = False
+            props.last_message = "★ 学習範囲はここまでです。パネル下の「フリー練習」で復習できます"
+            self.report({'INFO'}, "学習範囲はここまでです。フリー練習で復習できます")
+            return {'FINISHED'}
 
         if props.current_stage < max_stages:
             props.current_stage += 1
@@ -2942,6 +3076,11 @@ class TUTORIAL_OT_stage_next_free(Operator):
         max_stages_per_chapter = MAX_STAGES
         max_stages = max_stages_per_chapter.get(props.current_chapter, 1)
 
+        if (not props.show_all_chapters and props.current_chapter >= 6
+                and props.current_stage >= max_stages):
+            self.report({'INFO'}, "学習範囲はここまでです。フリー練習で復習できます")
+            return {'FINISHED'}
+
         from_ch, from_st = props.current_chapter, props.current_stage
         StageManager.finalize_current_run(context, completed=False)
 
@@ -3111,22 +3250,23 @@ class TUTORIAL_PT_main(Panel):
             7: "最終制作",
             8: "確認テスト",
         }
-        # Ch1〜7 ボタン（テスト中はロック）
+        # Ch1〜6（全章表示がオンのときは Ch7 も）ボタン（テスト中はロック）
         row = cbox.row(align=True)
         row.enabled = not props.test_mode_active
-        for i in range(1, 8):
+        for i in range(1, 8 if props.show_all_chapters else 7):
             op = row.operator("tutorial.goto_chapter", text=chapter_names[i], depress=(props.current_chapter == i))
             op.chapter = i
 
-        # Ch8 確認テストボタン（いつでも押せる・ポップアップ付き）
-        test_row = cbox.row()
-        test_row.operator(
-            "tutorial.enter_test_mode",
-            text="▶ 確認テスト（Ch8）" if not props.test_mode_active else "● テスト中",
-            depress=props.test_mode_active,
-        )
-        if props.test_mode_active:
-            cbox.label(text="⚠ テスト中はCh1〜7に戻れません", icon='LOCKED')
+        # Ch8 確認テストボタン（全章表示がオンのときだけ。ポップアップ付き）
+        if props.show_all_chapters or props.test_mode_active:
+            test_row = cbox.row()
+            test_row.operator(
+                "tutorial.enter_test_mode",
+                text="▶ 確認テスト（Ch8）" if not props.test_mode_active else "● テスト中",
+                depress=props.test_mode_active,
+            )
+            if props.test_mode_active:
+                cbox.label(text="⚠ テスト中はCh1〜7に戻れません", icon='LOCKED')
 
         info = StageManager.get_stage_info(props.current_chapter, props.current_stage)
         sbox = layout.box()
@@ -3273,14 +3413,13 @@ class TUTORIAL_PT_main(Panel):
             clear_row.scale_y = 1.5
             clear_row.operator("tutorial.next_stage", text="次へ進もう →", icon='TRIA_RIGHT')
 
-        layout.operator("tutorial.reset", text="リセット")
-
         layout.separator()
         nav = layout.row(align=True)
         nav.scale_y = 1.3
         max_st = max_stages_per_chapter.get(props.current_chapter, 1)
         at_start = (props.current_chapter == 1 and props.current_stage == 1)
-        at_end   = (props.current_chapter == 7 and props.current_stage == max_st)
+        end_ch = 7 if props.show_all_chapters else 6
+        at_end   = (props.current_chapter >= end_ch and props.current_stage >= max_st)
         left = nav.row()
         left.enabled = not at_start
         left.operator("tutorial.stage_prev", text="← 前のステージ", icon='TRIA_LEFT')
@@ -3289,6 +3428,7 @@ class TUTORIAL_PT_main(Panel):
         right.operator("tutorial.stage_next_free", text="次のステージ →", icon='TRIA_RIGHT')
 
         layout.separator()
+        layout.operator("tutorial.intro_tour", text="画面の見方を見る", icon='QUESTION').page = 1
         layout.label(text=f"失敗回数: {props.failed_validate_count}回")
 
 # =====================================================
@@ -3328,6 +3468,46 @@ class TUTORIAL_PT_shortcuts(Panel):
                 row = box.split(factor=0.45)
                 row.label(text=action)
                 row.label(text=keys)
+
+# =====================================================
+# FREE PRACTICE / ADMIN SUB-PANELS
+# =====================================================
+
+class TUTORIAL_PT_free_practice(Panel):
+    bl_label = "フリー練習"
+    bl_idname = "TUTORIAL_PT_free_practice"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Tutorial"
+    bl_parent_id = "TUTORIAL_PT_main"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        props = context.scene.tutorial_props
+        layout.label(text="自由に操作して、復習しましょう（判定はありません）")
+        layout.operator("tutorial.free_practice", text="練習用の立方体を用意")
+        layout.label(text="「セットアップ」を押すと、今のステージに戻れます")
+        if props.difficulty_mode != 'HARD':
+            layout.label(text="ショートカットは「ショートカット一覧（累積）」で確認できます")
+
+
+class TUTORIAL_PT_admin(Panel):
+    bl_label = "実施者用（通常は閉じています）"
+    bl_idname = "TUTORIAL_PT_admin"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Tutorial"
+    bl_parent_id = "TUTORIAL_PT_main"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        props = context.scene.tutorial_props
+        layout.prop(props, "show_all_chapters")
+        layout.operator("tutorial.reset", text="リセット（第1章の最初に戻る）")
+        layout.label(text="※ 学習中の参加者は、この欄を使いません")
+
 
 # =====================================================
 # UNDO HANDLER
@@ -3391,6 +3571,8 @@ classes = (
     TUTORIAL_OT_export_stage_summary_csv,
     TUTORIAL_OT_render_and_mark_saved,
     TUTORIAL_OT_toggle_steps,
+    TUTORIAL_OT_free_practice,
+    TUTORIAL_OT_intro_tour,
     TUTORIAL_OT_finish_and_turn_off,
     TUTORIAL_OT_setup_stage,
     TUTORIAL_OT_validate_stage,
@@ -3404,6 +3586,8 @@ classes = (
     TUTORIAL_OT_monitoring,
     TUTORIAL_PT_main,
     TUTORIAL_PT_shortcuts,
+    TUTORIAL_PT_free_practice,
+    TUTORIAL_PT_admin,
 )
 
 def register():
