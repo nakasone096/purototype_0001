@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 11, 1),
+    "version": (0, 11, 2),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -2656,53 +2656,60 @@ def _tour_title(page):
             else "画面の見方（%d/%d）" % (page, TOUR_PAGES))
 
 
+def _tour_row(col, name, desc):
+    """画面の見方：左に【名前】、右に説明（2列）。"""
+    row = col.split(factor=0.34)
+    row.label(text="【%s】" % name)
+    row.label(text=desc)
+
+
 def _draw_tour_page(layout, page, first_time=False):
-    """初回ポップアップと「画面の見方を見る」ボタンの、共通の描画。"""
+    """初回ポップアップと「画面の見方を見る」ボタンの、共通の描画。左列＝【名前】、右列＝説明。"""
     layout.label(text=_tour_title(page), icon='INFO')
     layout.separator()
     col = layout.column(align=True)
     if page == 1:
         col.label(text="ボタンの使い方：")
         col.separator()
-        col.label(text="【セットアップ】 問題を準備します（最初に押す）")
-        col.label(text="【確認】　　　　できたら押す（答え合わせをします）")
-        col.label(text="【次へ】　　　　クリアしたら次のステージへ")
-        col.label(text="【← →】　　　ステージを自由に移動できます")
-        col.label(text="【フリー】　　　　チャプター選択の右下。自由に練習したいとき")
+        _tour_row(col, "セットアップ", "問題を準備します（最初に押す）")
+        _tour_row(col, "確認", "できたら押す（答え合わせをします）")
+        _tour_row(col, "次へ", "クリアしたら次のステージへ")
+        _tour_row(col, "← →", "ステージを自由に移動できます")
+        _tour_row(col, "フリー", "チャプター選択の右下。自由に練習したいとき")
         footer = ("OKを押すと最初のステージが始まり、続けて画面の見方（3ページ）を説明します"
                   if first_time else "OKで次のページへ")
     elif page == 2:
-        col.label(text="画面の構成（Blenderの初期の並び）")
+        col.label(text="画面の構成（Blenderの初期の並び）：")
         col.separator()
-        col.label(text="・3Dビュー（中央の大きな領域）：物体を見て、操作する場所")
-        col.label(text="・アウトライナー（右上）：シーンにある物体の一覧")
-        col.label(text="・プロパティ（右下）：選んだ物体の設定（位置・回転・モディファイアーなど）")
-        col.label(text="・タイムライン（下）：アニメーション用。今回は使いません")
-        col.label(text="・一番上のバー：ファイルや編集などのメニュー")
+        _tour_row(col, "3Dビュー", "画面の大きな領域。物体を見て、操作する場所")
+        _tour_row(col, "アウトライナー", "画面右上の一覧。シーンにある物体の一覧")
+        _tour_row(col, "プロパティ", "画面右下。選んだ物体の設定（モディファイアーなど）")
+        _tour_row(col, "タイムライン", "画面の下。アニメーション用（今回は使いません）")
+        _tour_row(col, "トップバー", "画面の一番上。ファイルや編集などのメニュー")
         col.separator()
         col.label(text="※ 並びは環境によって違うことがあります")
         footer = "OKで次のページへ"
     elif page == 3:
-        col.label(text="サイドバーとツールバー")
+        col.label(text="サイドバーとツールバー：")
         col.separator()
-        col.label(text="・ツールバー（3Dビューの左端）：Tキーで出し入れ。移動・回転などのツール")
-        col.label(text="・サイドバー（3Dビューの右端）：Nキーで出し入れ")
-        col.label(text="　　「Tutorial」タブが、このチュートリアルです")
-        col.label(text="　　上部の「アイテム」欄では、位置・回転・スケールの数値を直接入力できます")
-        col.label(text="・パネルが狭いときは、左端をドラッグして広げられます")
+        _tour_row(col, "ツールバー", "3Dビューの左端。Tキーで出し入れ（移動・回転などのツール）")
+        _tour_row(col, "サイドバー", "3Dビューの右端。Nキーで出し入れ")
+        _tour_row(col, "Tutorial", "サイドバーのタブ。このチュートリアルです")
+        _tour_row(col, "アイテム", "サイドバー上部の欄。位置・回転・スケールを数値で入力")
+        _tour_row(col, "パネルの幅", "狭いときは、左端をドラッグして広げられます")
         col.separator()
-        col.label(text="・キー操作は、マウスを3Dビューの上に置いてから行います")
+        col.label(text="※ キー操作は、マウスを3Dビューの上に置いてから行います")
         footer = "OKで次のページへ"
     else:
-        col.label(text="座標軸・原点・モード")
+        col.label(text="座標軸・原点・モード：")
         col.separator()
-        col.label(text="・座標軸の色：X＝赤、Y＝緑、Z＝青")
-        col.label(text="・3Dカーソル（赤白の丸）：新しい物体が出る場所")
-        col.label(text="・原点（オレンジの点）：物体の中心")
-        col.label(text="・モード切替（Tab）：")
-        col.label(text="　　オブジェクトモード＝物体ごと動かす")
-        col.label(text="　　編集モード＝形そのもの（頂点・辺・面）を直す")
-        col.label(text="・画面の左上に、今のモードが表示されます")
+        _tour_row(col, "座標軸", "色で見分けます。X＝赤、Y＝緑、Z＝青")
+        _tour_row(col, "3Dカーソル", "赤白の丸。新しい物体が出る場所")
+        _tour_row(col, "原点", "オレンジの点。物体の中心")
+        _tour_row(col, "オブジェクトモード", "物体ごと動かす（Tabで切り替え）")
+        _tour_row(col, "編集モード", "形そのもの（頂点・辺・面）を直す（Tabで切り替え）")
+        col.separator()
+        col.label(text="※ 画面の左上に、今のモードが表示されます")
         footer = "OKで終わります。パネルの【画面の見方を見る】でいつでも読み返せます"
     layout.separator()
     layout.label(text=footer)
