@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 10, 0),
+    "version": (0, 11, 0),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -42,7 +42,7 @@ REFERENCE_IMAGE_ROTATION_DEG = (90.0, 0.0, 90.0)
 REFERENCE_IMAGE_DISPLAY_SIZE  = 2.0
 
 # 各チャプターのステージ数（Ch1・Ch3・Ch4の末尾は「復習」ステージ）
-MAX_STAGES = {1: 5, 2: 4, 3: 10, 4: 5, 5: 4, 6: 5, 7: 1, 8: 6}
+MAX_STAGES = {0: 1, 1: 5, 2: 4, 3: 10, 4: 5, 5: 4, 6: 5, 7: 1, 8: 6}
 
 # Ch4 ミラー課題で最初に置く「半分の箱」の頂点（Y=0 の面は開いている）
 HALF_BOX_VERTS = [(x, y, z) for x in (-1.0, 1.0) for y in (0.0, 1.0) for z in (-1.0, 1.0)]
@@ -60,7 +60,7 @@ SHORTCUT_TABLE = [
     (1, 1, "基本操作", "キャンセル",         "右クリック / Esc"),
     (1, 2, "基本操作", "移動",              "G"),
     (1, 2, "基本操作", "軸固定移動",         "G → X/Y/Z → 数字 → Enter"),
-    (1, 2, "基本操作", "数値を直接入力",      "N キー →「アイテム」／プロパティ →「オブジェクト」"),
+    (1, 2, "基本操作", "数値を直接入力",      "N キー上部の「アイテム」欄／プロパティ →「オブジェクト」"),
     (1, 3, "基本操作", "回転",              "R"),
     (1, 3, "基本操作", "軸固定回転",         "R → X/Y/Z → 角度 → Enter"),
     (1, 4, "基本操作", "拡大縮小",           "S → 数字 → Enter"),
@@ -103,10 +103,10 @@ SHORTCUT_TABLE = [
 # 「名前｜説明」の行は、「★ 今回のショートカット」と同じ2列（左=名前／右=説明）で表示する
 STAGE_ABOUT = {
     (1, 1): "選択｜操作するオブジェクトを決める\nポイント｜選んだものだけが動く・変わる",
-    (1, 2): "移動｜オブジェクトの位置を変える\n軸｜X・Y・Zごとに動かせる\n数値入力｜Nキーで直接入力してもOK",
-    (1, 3): "回転｜オブジェクトの向きを変える\n軸｜軸を決めて角度で回す\n数値入力｜Nキーで直接入力してもOK",
-    (1, 4): "拡大縮小｜オブジェクトの大きさを変える\n倍率｜2なら2倍、0.5なら半分\n数値入力｜Nキーで直接入力してもOK",
-    (1, 5): "復習｜変えた形を元に戻す\n元の状態｜回転0°・スケール1\n数値入力｜Nキーの数値を直してもOK",
+    (1, 2): "移動｜オブジェクトの位置を変える\n軸｜X・Y・Zごとに動かせる\n数値入力｜Nキー上部のアイテム欄でもOK",
+    (1, 3): "回転｜オブジェクトの向きを変える\n軸｜軸を決めて角度で回す\n数値入力｜Nキー上部のアイテム欄でもOK",
+    (1, 4): "拡大縮小｜オブジェクトの大きさを変える\n倍率｜2なら2倍、0.5なら半分\n数値入力｜Nキー上部のアイテム欄でもOK",
+    (1, 5): "復習｜変えた形を元に戻す\n元の状態｜回転0°・スケール1\n数値入力｜Nキー上部のアイテム欄を直してもOK",
     (2, 1): "パン｜視点を上下左右に平行移動\nポイント｜オブジェクト自体は動かない",
     (2, 2): "ズーム｜視点を近づける・遠ざける",
     (2, 3): "ビュー回転｜視点をぐるりと回す\nポイント｜裏側も見られる",
@@ -150,7 +150,7 @@ class VertexPos(PropertyGroup):
 # =====================================================
 
 class StageRun(PropertyGroup):
-    chapter: IntProperty(default=1, min=1, max=7)
+    chapter: IntProperty(default=1, min=0, max=8)
     stage: IntProperty(default=1, min=1, max=10)
 
     completed: BoolProperty(default=False)
@@ -706,7 +706,13 @@ class StageManager:
         props = context.scene.tutorial_props
         ch = props.current_chapter
 
-        if ch == 1:
+        props.free_mode = False   # ステージを準備したら、フリーは終わり
+        if ch == 0:
+            # 基本知識：まっさらな立方体を置くだけ
+            StageManager._clear_scene_no_undo()
+            StageManager._make_cube_no_undo("Cube", size=2.0)
+
+        elif ch == 1:
             StageManager._clear_scene_no_undo()
             cube = StageManager._make_cube_no_undo("Cube", size=2.0)
             props.initial_position = tuple(cube.location)
@@ -1129,6 +1135,22 @@ class StageManager:
     # -----------------------------
     @staticmethod
     def get_stage_info(chapter_num, stage_num):
+        if chapter_num == 0:
+            return {
+                "title": "第0章: 基本知識",
+                "name": "ステージ1: このアドオンの使い方",
+                "description": "まず【セットアップ】を押して、使い方と画面の見方を確認しましょう",
+                "details": "① 【セットアップ】を押す（ポップアップが4ページ出ます）\n"
+                           "② 読んだら「OK」で次のページへ\n"
+                           "③ 読み終えたら【確認】を押す\n"
+                           "④ クリアしたら【次へ進もう】で第1章へ\n"
+                           "\n"
+                           "このアドオンで、まず使うボタンは2つです\n"
+                           "【セットアップ】｜問題を準備する（最初に押す）\n"
+                           "【確認】｜できたら押して、答え合わせをする\n"
+                           "\n"
+                           "パネルの幅｜狭いときは、左端をドラッグして広げられます",
+            }
         if chapter_num == 8:
             stages = {
                 1: {
@@ -1256,7 +1278,7 @@ class StageManager:
                 "description": "参考画像を見ながらリンゴを作り、レンダーを保存してください",
                 "details": "参考画像を見ながらリンゴを作ってみてください\n"
                            "\n"
-                           "「確認」ボタンを押すたびに\n"
+                           "【確認】を押すたびに\n"
                            "作り方のヒントが1つずつ表示されます\n"
                            "\n"
                            "完成したら F12 でレンダー\n"
@@ -1282,7 +1304,7 @@ class StageManager:
                                "② G キーを押す（移動モード）\n"
                                "③ X キーを押す（X軸に固定）\n"
                                "④ 2 と入力して Enter で確定\n"
-                               "   別の方法：N キー →「アイテム」の「位置」に数値を直接入力\n"
+                               "   別の方法：N キー上部の「アイテム」欄の「位置」に数値を直接入力\n"
                                "   （右のプロパティ →「オブジェクト」→「トランスフォーム」でも同じ）",
                 },
                 3: {
@@ -1293,7 +1315,7 @@ class StageManager:
                                "② R キーを押す（回転モード）\n"
                                "③ X キーを押す（X軸周りに固定）\n"
                                "④ 45 と入力して Enter で確定\n"
-                               "   別の方法：N キー →「アイテム」の「回転」に数値を直接入力",
+                               "   別の方法：N キー上部の「アイテム」欄の「回転」に数値を直接入力",
                 },
                 4: {
                     "title": "第1章: 基本操作",
@@ -1304,18 +1326,18 @@ class StageManager:
                                "③ 好きな数字を入力（例: 2 で2倍）\n"
                                "④ Enter で確定\n"
                                "   （軸固定: S → X/Y/Z → 数字 → Enter）\n"
-                               "   別の方法：N キー →「アイテム」の「スケール」に数値を直接入力",
+                               "   別の方法：N キー上部の「アイテム」欄の「スケール」に数値を直接入力",
                 },
                 5: {
                     "title": "第1章: 基本操作",
                     "name": "ステージ5: 元に戻そう（復習）",
-                    "description": "回転とスケールが変わったキューブを、元の状態（回転0°・スケール1）に戻してください",
+                    "description": "回転とスケールが変わったキューブ（角度45度・スケール3）を、元の状態（回転0°・スケール1）に戻してください",
                     "details": "① 今のキューブは 回転 X・Y・Z=45°、スケール 3 になっています\n"
                                "② 回転をすべて 0° に戻す\n"
-                               "   ・N キー →「アイテム」の「回転」X・Y・Z を 0 に書き換える（かんたん）\n"
+                               "   ・N キー上部の「アイテム」欄の「回転」X・Y・Z を 0 に書き換えてもOK（かんたん）\n"
                                "   ・R で回して戻す方法は、3軸が重なっているので難しい\n"
                                "③ スケールをすべて 1 に戻す\n"
-                               "   ・N キーの「スケール」を 1 に書き換える、または S → 数字",
+                               "   ・N キー上部の「アイテム」欄の「スケール」を 1 に書き換える、または S → 数字",
                 },
             }
             return stages.get(stage_num, {})
@@ -1373,7 +1395,7 @@ class StageManager:
                                "   （向きも量も自由。G → Z のように軸を決めてもOK）\n"
                                "   大きさを変える（S）、回す（R）でもOK\n"
                                "③ Ctrl+Z を押して、取り消してみよう\n"
-                               "④ 取り消せたら「確認」ボタンを押す"},
+                               "④ 取り消せたら【確認】を押す"},
                 3: {"title": "第3章: オブジェクト操作", "name": "ステージ3: 削除",
                     "description": "オブジェクトを削除してください",
                     "details": "① オブジェクトをクリックして選択\n"
@@ -1551,6 +1573,16 @@ class StageManager:
         st = props.current_stage
         obj = context.active_object
 
+        # ---- Chapter 0: 基本知識（【セットアップ】を押したら、【確認】で通る）----
+        if ch == 0:
+            if props.setup_count >= 1:
+                return True, "✓ 使い方を確認しました。第1章へ進みましょう", "OK", []
+            return False, "❌ まず【セットアップ】を押してください", "NO_SETUP_YET", [
+                "パネルの下の方にある【セットアップ】を押してください",
+                "ポップアップが出るので、「OK」で進みながら読んでください",
+                "読み終えたら、【確認】を押します",
+            ]
+
         # ---- Chapter 1 ----
         if ch == 1:
             if st == 1:
@@ -1611,7 +1643,7 @@ class StageManager:
                     return False, "❌ キューブを選択してください", "NO_ACTIVE_CUBE", [
                         "3Dビューのキューブをクリックして選択してください",
                         "回転とスケールの数値を元に戻します",
-                        "N キーで出るサイドバーの「アイテム」に数値があります",
+                        "N キーを押すと出る、上部の「アイテム」欄に数値があります",
                     ]
                 rot_ok = all(abs(((math.degrees(a) + 180.0) % 360.0) - 180.0) < 2.0 for a in obj.rotation_euler)
                 scale_ok = all(abs(v - 1.0) < 0.05 for v in obj.scale)
@@ -1624,7 +1656,7 @@ class StageManager:
                     msg.append("回転が0°ではありません")
                 return False, "❌ まだ元の状態ではありません（" + "、".join(msg) + "）", "NOT_RESTORED", [
                     "S を押して数字を入力すると、その倍率になります（2なら2倍）。3倍に大きくなったものを小さくするには何倍にすればよいでしょう？",
-                    "角度は R → 軸 → 数字 以外の方法もあります。N キーで出るサイドバーの「アイテム」に、数値が出ています。そこを直接書き換えてみよう",
+                    "角度は R → 軸 → 数字 以外の方法もあります。N キーを押すと出る、上部の「アイテム」欄に、数値が出ています。そこを直接書き換えてもOKです",
                     "回転は X・Y・Z すべてを 0° に、スケールは X・Y・Z すべてを 1 にします",
                 ]
 
@@ -1734,7 +1766,7 @@ class StageManager:
                     return False, "❌ 立方体は1つだけにしてください", "TOO_MANY_OBJECTS", [
                         "余分なオブジェクトは X キーで削除してください",
                         "立方体を1つだけ追加して進めます",
-                        "やり直すときは「リセット」ボタンが使えます",
+                        "やり直すときは【セットアップ】を押してください",
                     ]
                 target = meshes[0]
                 if target.mode == 'EDIT':
@@ -1855,7 +1887,7 @@ class StageManager:
                 return False, "❌ オブジェクトを選択してください", "NO_ACTIVE_OBJECT", [
                     "3DビューでキューブをクリックしてActiveにしてください",
                     "オレンジ枠が出たら選択できています",
-                    "セットアップを押すとキューブが配置されます",
+                    "【セットアップ】を押すとキューブが配置されます",
                 ]
             if st == 1:
                 subs = [m for m in obj.modifiers if m.type == 'SUBSURF']
@@ -1880,7 +1912,7 @@ class StageManager:
                     return True, "✓ サブディビジョンサーフェスを適用して、形を確定しました", "OK", []
                 if nverts > 8:
                     return False, "❌ レベル数が小さいまま適用されています（2以上でやり直してください）", "SUBSURF_APPLIED_LOW", [
-                        "「リセット」で最初の状態に戻せます",
+                        "【セットアップ】で最初の状態に戻せます",
                         "もう一度サブディビジョンサーフェスを追加して、レベル数を 2 にします",
                         "そのあと「適用」してください",
                     ]
@@ -1948,7 +1980,7 @@ class StageManager:
                         "3以上にすると、角がなめらかな丸みになります",
                     ]
                 return False, "❌ ベベルが見つかりません", "NO_MODIFIER", [
-                    "リセットボタンで最初の状態に戻せます",
+                    "【セットアップ】で最初の状態に戻せます",
                     "または「モディファイアーを追加」→「生成」→「ベベル」で追加します",
                     "そのあと「セグメント」を3以上にしてください",
                 ]
@@ -2231,12 +2263,13 @@ def _on_difficulty_changed(self, context):
 
 
 class TUTORIAL_PG_Properties(PropertyGroup):
-    current_chapter: IntProperty(default=1, min=1, max=8)
+    current_chapter: IntProperty(default=0, min=0, max=8)   # 0=基本知識（最初に表示）
     current_stage: IntProperty(default=1, min=1, max=10)
     stage_complete: BoolProperty(default=False)
     monitoring_active: BoolProperty(default=False)
     test_mode_active: BoolProperty(default=False)      # 確認テスト中フラグ（Ch1〜7への移動をロック）
     intro_popup_shown: BoolProperty(default=False)     # 初回説明ポップアップ表示済みフラグ
+    free_mode: BoolProperty(default=False)             # 「フリー」（判定なしの練習）を開いている
 
     # Chapter 1 initial transforms
     initial_position: FloatVectorProperty(default=(0.0, 0.0, 0.0), size=3)
@@ -2281,7 +2314,7 @@ class TUTORIAL_PG_Properties(PropertyGroup):
         description="手順とヒントの表示量を変えます",
         items=[
             ('EASY',   "かんたん",   "手順をすべて表示。ヒントも最初から全部表示"),
-            ('NORMAL', "ふつう",     "ショートカットだけ表示。手順は「手順を見る」ボタンで開く。失敗するたびヒントを1つずつ表示（デフォルト）"),
+            ('NORMAL', "ふつう",     "ショートカットだけ表示。手順は【手順を見る】で開く。失敗するたびヒントを1つずつ表示（デフォルト）"),
             ('HARD',   "むずかしい", "機能の説明だけ表示（ショートカットも手順もなし）。ヒントも出さない"),
         ],
         default='NORMAL',
@@ -2519,12 +2552,13 @@ class TUTORIAL_OT_export_stage_summary_csv(Operator):
 
 class TUTORIAL_OT_free_practice(Operator):
     bl_idname = "tutorial.free_practice"
-    bl_label = "練習用の立方体を用意"
-    bl_description = "判定のない練習用のシーンを用意します（「セットアップ」で今のステージに戻れます）"
+    bl_label = "フリー"
+    bl_description = "判定のない練習用のシーンを用意します（【セットアップ】で、元のステージに戻れます）"
 
     def execute(self, context):
         props = context.scene.tutorial_props
         StageManager.finalize_current_run(context, completed=False)
+        props.free_mode = True
         props.monitoring_active = False        # 練習中の Ctrl+Z をステージの記録に数えない
         props.stage_start_time = 0.0
         props.stage_complete = False
@@ -2641,7 +2675,7 @@ def _draw_tour_page(layout, page, first_time=False):
         col.label(text="【確認】　　　　できたら押す（答え合わせをします）")
         col.label(text="【次へ】　　　　クリアしたら次のステージへ")
         col.label(text="【← →】　　　ステージを自由に移動できます")
-        col.label(text="【フリー練習】　自由に練習したいとき（パネルの下の方）")
+        col.label(text="【フリー】　　　　チャプター選択の右下。自由に練習したいとき")
         footer = ("OKを押すと最初のステージが始まり、続けて画面の見方（3ページ）を説明します"
                   if first_time else "OKで次のページへ")
     elif page == 2:
@@ -2661,7 +2695,8 @@ def _draw_tour_page(layout, page, first_time=False):
         col.label(text="・ツールバー（3Dビューの左端）：Tキーで出し入れ。移動・回転などのツール")
         col.label(text="・サイドバー（3Dビューの右端）：Nキーで出し入れ")
         col.label(text="　　「Tutorial」タブが、このチュートリアルです")
-        col.label(text="　　「アイテム」タブでは、位置・回転・スケールの数値を直接入力できます")
+        col.label(text="　　上部の「アイテム」欄では、位置・回転・スケールの数値を直接入力できます")
+        col.label(text="・パネルが狭いときは、左端をドラッグして広げられます")
         col.separator()
         col.label(text="・キー操作は、マウスを3Dビューの上に置いてから行います")
         footer = "OKで次のページへ"
@@ -2675,7 +2710,7 @@ def _draw_tour_page(layout, page, first_time=False):
         col.label(text="　　オブジェクトモード＝物体ごと動かす")
         col.label(text="　　編集モード＝形そのもの（頂点・辺・面）を直す")
         col.label(text="・画面の左上に、今のモードが表示されます")
-        footer = "OKで終わります。パネルの「画面の見方を見る」でいつでも読み返せます"
+        footer = "OKで終わります。パネルの【画面の見方を見る】でいつでも読み返せます"
     layout.separator()
     layout.label(text=footer)
 
@@ -2721,8 +2756,9 @@ class TUTORIAL_OT_setup_stage(Operator):
 
     def invoke(self, context, event):
         props = context.scene.tutorial_props
-        # 初回のみ、ようこそ＋ボタンの使い方のポップアップを表示する（続けて画面の見方）
-        if not props.intro_popup_shown:
+        # 第0章（基本知識）で【セットアップ】を押したとき、ようこそ＋ボタンの使い方のポップアップを表示する
+        # （続けて画面の見方）
+        if props.current_chapter == 0:
             return context.window_manager.invoke_props_dialog(self, width=560)
         return self.execute(context)
 
@@ -2732,7 +2768,7 @@ class TUTORIAL_OT_setup_stage(Operator):
 
     def execute(self, context):
         props = context.scene.tutorial_props
-        first_time = not props.intro_popup_shown
+        first_time = (props.current_chapter == 0)
         props.intro_popup_shown = True   # 表示済みフラグをセット
         ch = props.current_chapter
 
@@ -2862,8 +2898,8 @@ class TUTORIAL_OT_next_stage(Operator):
                 and props.current_stage >= max_stages):
             props.stage_start_time = 0.0
             props.last_result_ok = False
-            props.last_message = "★ 学習範囲はここまでです。パネル下の「フリー練習」で復習できます"
-            self.report({'INFO'}, "学習範囲はここまでです。フリー練習で復習できます")
+            props.last_message = "★ 学習範囲はここまでです。チャプター選択の【フリー】で復習できます"
+            self.report({'INFO'}, "学習範囲はここまでです。【フリー】で復習できます")
             return {'FINISHED'}
 
         if props.current_stage < max_stages:
@@ -2915,11 +2951,12 @@ class TUTORIAL_OT_reset(Operator):
         props = context.scene.tutorial_props
         StageManager.finalize_current_run(context, completed=False)
 
-        props.current_chapter = 1
+        props.current_chapter = 0
         props.current_stage = 1
         props.stage_complete = False
         props.monitoring_active = False
         props.test_mode_active = False
+        props.free_mode = False
 
         props.failed_validate_count = 0
         props.stage_start_time = 0.0
@@ -2938,7 +2975,7 @@ class TUTORIAL_OT_reset(Operator):
 class TUTORIAL_OT_goto_chapter(Operator):
     bl_idname = "tutorial.goto_chapter"
     bl_label = "チャプターへ"
-    chapter: IntProperty(default=1, min=1, max=7)
+    chapter: IntProperty(default=1, min=0, max=7)
 
     def execute(self, context):
         props = context.scene.tutorial_props
@@ -2946,6 +2983,7 @@ class TUTORIAL_OT_goto_chapter(Operator):
 
         props.current_chapter = self.chapter
         props.current_stage = 1
+        props.free_mode = False
         props.stage_complete = False
         props.monitoring_active = False
 
@@ -3027,7 +3065,7 @@ class TUTORIAL_OT_stage_prev(Operator):
                 return {'FINISHED'}
         elif props.current_stage > 1:
             props.current_stage -= 1
-        elif props.current_chapter > 1:
+        elif props.current_chapter > 0:
             props.current_chapter -= 1
             props.current_stage = max_stages_per_chapter.get(props.current_chapter, 1)
         else:
@@ -3241,6 +3279,7 @@ class TUTORIAL_PT_main(Panel):
         cbox = layout.box()
         cbox.label(text="チャプター選択")
         chapter_names = {
+            0: "基本知識",
             1: "基本操作",
             2: "ビュー",
             3: "モデリング",
@@ -3250,12 +3289,17 @@ class TUTORIAL_PT_main(Panel):
             7: "最終制作",
             8: "確認テスト",
         }
-        # Ch1〜6（全章表示がオンのときは Ch7 も）ボタン（テスト中はロック）
-        row = cbox.row(align=True)
-        row.enabled = not props.test_mode_active
-        for i in range(1, 8 if props.show_all_chapters else 7):
-            op = row.operator("tutorial.goto_chapter", text=chapter_names[i], depress=(props.current_chapter == i))
-            op.chapter = i
+        # 基本知識・Ch1〜6（全章表示がオンのときは Ch7 も）と、フリー。2行に分けて表示（テスト中はロック）
+        seq = list(range(0, 8 if props.show_all_chapters else 7))
+        for r_i, chunk in enumerate((seq[:4], seq[4:])):
+            row = cbox.row(align=True)
+            row.enabled = not props.test_mode_active
+            for i in chunk:
+                op = row.operator("tutorial.goto_chapter", text=chapter_names[i],
+                                  depress=(props.current_chapter == i and not props.free_mode))
+                op.chapter = i
+            if r_i == 1:
+                row.operator("tutorial.free_practice", text="フリー", depress=props.free_mode)
 
         # Ch8 確認テストボタン（全章表示がオンのときだけ。ポップアップ付き）
         if props.show_all_chapters or props.test_mode_active:
@@ -3267,6 +3311,22 @@ class TUTORIAL_PT_main(Panel):
             )
             if props.test_mode_active:
                 cbox.label(text="⚠ テスト中はCh1〜7に戻れません", icon='LOCKED')
+
+        # フリー：判定のない自由な練習。ステージの表示・確認・移動は出さない
+        if props.free_mode:
+            fbox = layout.box()
+            fbox.label(text="フリー：自由に練習しましょう（判定はありません）", icon='INFO')
+            fbox.label(text="・まっさらな立方体に戻したいときは、下のボタンを押します")
+            fbox.operator("tutorial.free_practice", text="練習用の立方体を用意")
+            fbox.label(text="・【セットアップ】を押すと、元のステージに戻れます")
+            if props.difficulty_mode != 'HARD':
+                fbox.label(text="・ショートカットは「ショートカット一覧（累積）」で確認できます")
+            fcol = layout.column()
+            fcol.scale_y = 1.2
+            fcol.operator("tutorial.setup_stage", text="セットアップ")
+            layout.separator()
+            layout.operator("tutorial.intro_tour", text="画面の見方を見る", icon='QUESTION').page = 1
+            return
 
         info = StageManager.get_stage_info(props.current_chapter, props.current_stage)
         sbox = layout.box()
@@ -3414,18 +3474,19 @@ class TUTORIAL_PT_main(Panel):
             clear_row.operator("tutorial.next_stage", text="次へ進もう →", icon='TRIA_RIGHT')
 
         layout.separator()
-        nav = layout.row(align=True)
-        nav.scale_y = 1.3
-        max_st = max_stages_per_chapter.get(props.current_chapter, 1)
-        at_start = (props.current_chapter == 1 and props.current_stage == 1)
-        end_ch = 7 if props.show_all_chapters else 6
-        at_end   = (props.current_chapter >= end_ch and props.current_stage >= max_st)
-        left = nav.row()
-        left.enabled = not at_start
-        left.operator("tutorial.stage_prev", text="← 前のステージ", icon='TRIA_LEFT')
-        right = nav.row()
-        right.enabled = not at_end
-        right.operator("tutorial.stage_next_free", text="次のステージ →", icon='TRIA_RIGHT')
+        if props.current_chapter != 0:
+            nav = layout.row(align=True)
+            nav.scale_y = 1.3
+            max_st = max_stages_per_chapter.get(props.current_chapter, 1)
+            at_start = (props.current_chapter == 1 and props.current_stage == 1)
+            end_ch = 7 if props.show_all_chapters else 6
+            at_end   = (props.current_chapter >= end_ch and props.current_stage >= max_st)
+            left = nav.row()
+            left.enabled = not at_start
+            left.operator("tutorial.stage_prev", text="← 前のステージ", icon='TRIA_LEFT')
+            right = nav.row()
+            right.enabled = not at_end
+            right.operator("tutorial.stage_next_free", text="次のステージ →", icon='TRIA_RIGHT')
 
         layout.separator()
         layout.operator("tutorial.intro_tour", text="画面の見方を見る", icon='QUESTION').page = 1
@@ -3473,25 +3534,6 @@ class TUTORIAL_PT_shortcuts(Panel):
 # FREE PRACTICE / ADMIN SUB-PANELS
 # =====================================================
 
-class TUTORIAL_PT_free_practice(Panel):
-    bl_label = "フリー練習"
-    bl_idname = "TUTORIAL_PT_free_practice"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "Tutorial"
-    bl_parent_id = "TUTORIAL_PT_main"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    def draw(self, context):
-        layout = self.layout
-        props = context.scene.tutorial_props
-        layout.label(text="自由に操作して、復習しましょう（判定はありません）")
-        layout.operator("tutorial.free_practice", text="練習用の立方体を用意")
-        layout.label(text="「セットアップ」を押すと、今のステージに戻れます")
-        if props.difficulty_mode != 'HARD':
-            layout.label(text="ショートカットは「ショートカット一覧（累積）」で確認できます")
-
-
 class TUTORIAL_PT_admin(Panel):
     bl_label = "実施者用（通常は閉じています）"
     bl_idname = "TUTORIAL_PT_admin"
@@ -3505,7 +3547,7 @@ class TUTORIAL_PT_admin(Panel):
         layout = self.layout
         props = context.scene.tutorial_props
         layout.prop(props, "show_all_chapters")
-        layout.operator("tutorial.reset", text="リセット（第1章の最初に戻る）")
+        layout.operator("tutorial.reset", text="リセット（第0章の最初に戻る）")
         layout.label(text="※ 学習中の参加者は、この欄を使いません")
 
 
@@ -3586,7 +3628,6 @@ classes = (
     TUTORIAL_OT_monitoring,
     TUTORIAL_PT_main,
     TUTORIAL_PT_shortcuts,
-    TUTORIAL_PT_free_practice,
     TUTORIAL_PT_admin,
 )
 
