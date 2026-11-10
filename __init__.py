@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 11, 0),
+    "version": (0, 11, 1),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -2553,7 +2553,7 @@ class TUTORIAL_OT_export_stage_summary_csv(Operator):
 class TUTORIAL_OT_free_practice(Operator):
     bl_idname = "tutorial.free_practice"
     bl_label = "フリー"
-    bl_description = "判定のない練習用のシーンを用意します（【セットアップ】で、元のステージに戻れます）"
+    bl_description = "判定のない自由な練習の章です（シーンはそのままです。【セットアップ】で空のシーンになります）"
 
     def execute(self, context):
         props = context.scene.tutorial_props
@@ -2562,21 +2562,14 @@ class TUTORIAL_OT_free_practice(Operator):
         props.monitoring_active = False        # 練習中の Ctrl+Z をステージの記録に数えない
         props.stage_start_time = 0.0
         props.stage_complete = False
-        try:
-            StageManager._clear_scene_no_undo()
-            StageManager._make_cube_no_undo("Cube", size=2.0)
-        except Exception as e:
-            self.report({'ERROR'}, f"練習用シーンの用意に失敗: {e}")
-            return {'CANCELLED'}
         StageManager.append_participant_event(context, {
             "t": StageManager._now(),
             "participant_id": StageManager._safe_participant_id(props.participant_id),
-            "event": "free_practice_setup",
+            "event": "free_practice_start",
             "chapter": props.current_chapter,
             "stage": props.current_stage,
             "difficulty_mode": props.difficulty_mode,
         })
-        self.report({'INFO'}, "練習用の立方体を用意しました。自由に操作してみましょう")
         return {'FINISHED'}
 
 
@@ -2758,7 +2751,7 @@ class TUTORIAL_OT_setup_stage(Operator):
         props = context.scene.tutorial_props
         # 第0章（基本知識）で【セットアップ】を押したとき、ようこそ＋ボタンの使い方のポップアップを表示する
         # （続けて画面の見方）
-        if props.current_chapter == 0:
+        if props.current_chapter == 0 and not props.free_mode:
             return context.window_manager.invoke_props_dialog(self, width=560)
         return self.execute(context)
 
@@ -2768,6 +2761,23 @@ class TUTORIAL_OT_setup_stage(Operator):
 
     def execute(self, context):
         props = context.scene.tutorial_props
+        # フリー：【セットアップ】は、オブジェクトなしの空のシーンにする（他の章と同じく、章の初期状態）
+        if props.free_mode:
+            try:
+                StageManager._clear_scene_no_undo()
+            except Exception as e:
+                self.report({'ERROR'}, f"空のシーンにできませんでした: {e}")
+                return {'CANCELLED'}
+            StageManager.append_participant_event(context, {
+                "t": StageManager._now(),
+                "participant_id": StageManager._safe_participant_id(props.participant_id),
+                "event": "free_practice_setup",
+                "chapter": props.current_chapter,
+                "stage": props.current_stage,
+                "difficulty_mode": props.difficulty_mode,
+            })
+            self.report({'INFO'}, "空のシーンにしました。自由に操作してみましょう")
+            return {'FINISHED'}
         first_time = (props.current_chapter == 0)
         props.intro_popup_shown = True   # 表示済みフラグをセット
         ch = props.current_chapter
@@ -3316,9 +3326,8 @@ class TUTORIAL_PT_main(Panel):
         if props.free_mode:
             fbox = layout.box()
             fbox.label(text="フリー：自由に練習しましょう（判定はありません）", icon='INFO')
-            fbox.label(text="・まっさらな立方体に戻したいときは、下のボタンを押します")
-            fbox.operator("tutorial.free_practice", text="練習用の立方体を用意")
-            fbox.label(text="・【セットアップ】を押すと、元のステージに戻れます")
+            fbox.label(text="・【セットアップ】を押すと、オブジェクトなしの空のシーンになります")
+            fbox.label(text="・元のステージに戻るときは、章のボタンを押して【セットアップ】")
             if props.difficulty_mode != 'HARD':
                 fbox.label(text="・ショートカットは「ショートカット一覧（累積）」で確認できます")
             fcol = layout.column()
