@@ -10,12 +10,13 @@
 
 使い方（Blender 4.2 で）:
   blender --background --factory-startup 元.blend --python make_free_models.py -- \
-      出力.blend コレクション名 [--exclude メッシュ名 ...] [--rename 元の名前=新しい名前 ...]
+      出力.blend コレクション名 [--exclude メッシュ名 ...] [--rename 元の名前=新しい名前 ...] [--rotate-z 角度]
 例:
   blender -b --factory-startup 3つ目.blend --python make_free_models.py -- free_model_house.blend お手本_ミニチュアハウス       --exclude 平面 --rename Cube=壁 Cube.001=屋根
 パーツの名前は、アウトライナーに出るので、「何のパーツか」が分かる名前にします（お手本_壁、お手本_屋根 など）。
 どのオブジェクトにも、お手本の印（カスタムプロパティ tutorial_free_model）を付けます。
 """
+import math
 import sys
 import bpy
 from mathutils import Matrix
@@ -26,15 +27,17 @@ PREFIX = "お手本_"
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:]
     out_path, coll_name = argv[0], argv[1]
-    exclude, rename, mode = set(), {}, None
+    exclude, rename, mode, rot_z = set(), {}, None, 0.0
     for tok in argv[2:]:
-        if tok in ("--exclude", "--rename"):
+        if tok in ("--exclude", "--rename", "--rotate-z"):
             mode = tok
         elif mode == "--exclude":
             exclude.add(tok)
         elif mode == "--rename":
             old, new = tok.split("=", 1)
             rename[old] = new
+        elif mode == "--rotate-z":
+            rot_z = float(tok)          # Z軸まわりに回す角度（度）。+90 は、上から見て反時計まわり（BlenderのR→Z→90と同じ）
     if not coll_name.startswith(PREFIX):
         raise SystemExit(f"コレクション名は「{PREFIX}」で始めてください: {coll_name}")
 
@@ -51,6 +54,8 @@ def main():
         me.transform(o.matrix_world)
         if o.matrix_world.determinant() < 0:      # マイナスのスケールで裏返っていた面を、直す
             me.flip_normals()
+        if rot_z:
+            me.transform(Matrix.Rotation(math.radians(rot_z), 4, 'Z'))   # 全パーツを同じだけ回す
         name = PREFIX + rename.get(o.name, o.name)
         me.name = name
         ob = bpy.data.objects.new(name, me)
