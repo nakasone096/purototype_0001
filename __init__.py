@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 12, 0),
+    "version": (0, 12, 1),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -2558,6 +2558,9 @@ class TUTORIAL_OT_free_practice(Operator):
 
     def execute(self, context):
         props = context.scene.tutorial_props
+        if props.test_mode_active:      # 確認テスト中は、フリーに入れない
+            self.report({'WARNING'}, "確認テスト中は、フリーに入れません")
+            return {'CANCELLED'}
         StageManager.finalize_current_run(context, completed=False)
         props.free_mode = True
         props.monitoring_active = False        # 練習中の Ctrl+Z をステージの記録に数えない
@@ -3154,6 +3157,7 @@ class TUTORIAL_OT_enter_test_mode(Operator):
         StageManager.finalize_current_run(context, completed=False)
 
         props.test_mode_active = True
+        props.free_mode = False        # フリー中に開始しても、テストの画面に切り替わるように
         props.current_chapter = 8
         props.current_stage = 1
         props.stage_complete = False
