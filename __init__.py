@@ -2,7 +2,7 @@
 bl_info = {
     "name": "3DCG Tutorial Simulator",
     "blender": (4, 2, 0),
-    "version": (0, 11, 2),
+    "version": (0, 12, 0),
     "author": "Daichi",
     "description": "Interactive 3D learning simulation for Blender (Ch1-6 tutorials + per-participant JSONL logging + CSV export + DIR_PATH w/ safe buttons; Ch6 Stage1 only w/ auto camera+sun on setup)",
     "category": "Education",
@@ -605,6 +605,7 @@ class StageManager:
             bpy.data.objects.remove(obj, do_unlink=True)
         for mesh in [m for m in bpy.data.meshes if m.users == 0]:
             bpy.data.meshes.remove(mesh)
+        _remove_free_model_leftovers()      # フリーのお手本の、空になったコレクションと色も片づける
         bpy.context.view_layer.update()
 
     @staticmethod
@@ -2573,6 +2574,119 @@ class TUTORIAL_OT_free_practice(Operator):
         return {'FINISHED'}
 
 
+# フリーの「お手本」（似せて作ってみる見本。見るだけで、動かせない）
+# モデルは、同じフォルダの .blend（tools/make_free_models.py で作ったもの）から読み込む。
+FREE_MODEL_PREFIX = "お手本_"
+FREE_MODELS = {
+    'HOUSE': ("free_model_house.blend", "ミニチュアハウス"),
+    'CONE': ("free_model_cone.blend", "三角コーン"),
+}
+FREE_MODEL_OFFSET_X = 7.0      # 作業の場所（原点）のとなりに出す
+
+
+def _remove_free_model_leftovers():
+    """名前が「お手本_」で始まる、コレクション・使われていない色を消す。"""
+    for coll in [c for c in bpy.data.collections if c.name.startswith(FREE_MODEL_PREFIX)]:
+        if len(coll.objects) == 0:
+            bpy.data.collections.remove(coll)
+    for mat in [m for m in bpy.data.materials if m.name.startswith(FREE_MODEL_PREFIX) and m.users == 0]:
+        bpy.data.materials.remove(mat)
+
+
+def _remove_free_models():
+    """出ているお手本を、オブジェクト・メッシュ・色ごと消す。消した個数を返す。"""
+    removed = 0
+    # お手本の印（カスタムプロパティ）か、コレクション名のどちらかで見分ける（名前を変えられても消せるように）
+    targets = {ob for ob in bpy.data.objects if ob.get("tutorial_free_model")}
+    for coll in bpy.data.collections:
+        if coll.name.startswith(FREE_MODEL_PREFIX):
+            targets.update(coll.objects)
+    for ob in targets:
+        bpy.data.objects.remove(ob, do_unlink=True)
+        removed += 1
+    for coll in [c for c in bpy.data.collections if c.name.startswith(FREE_MODEL_PREFIX)]:
+        bpy.data.collections.remove(coll)
+    for me in [m for m in bpy.data.meshes if m.users == 0]:
+        bpy.data.meshes.remove(me)
+    _remove_free_model_leftovers()
+    return removed
+
+
+class TUTORIAL_OT_free_model(Operator):
+    bl_idname = "tutorial.free_model"
+    bl_label = "お手本を出す"
+    bl_description = "似せて作るための見本を、となりに出します（見るだけで、動かせません）"
+
+    model: EnumProperty(items=[(k, v[1], "") for k, v in FREE_MODELS.items()], default='HOUSE')
+
+    def execute(self, context):
+        props = context.scene.tutorial_props
+        if not props.free_mode:
+            return {'CANCELLED'}
+        fname, label = FREE_MODELS[self.model]
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), fname)
+        if not os.path.isfile(path):
+            self.report({'ERROR'}, f"お手本のファイルが見つかりません: {fname}")
+            return {'CANCELLED'}
+        try:
+            if context.mode != 'OBJECT' and context.view_layer.objects.active is not None:
+                bpy.ops.object.mode_set(mode='OBJECT')
+        except Exception:
+            pass
+        _remove_free_models()                      # お手本は、いつも1つだけ
+        try:
+            with bpy.data.libraries.load(path, link=False) as (data_from, data_to):
+                data_to.collections = [n for n in data_from.collections if n.startswith(FREE_MODEL_PREFIX)]
+        except Exception as e:
+            self.report({'ERROR'}, f"お手本を読み込めませんでした: {e}")
+            return {'CANCELLED'}
+        shown = 0
+        for coll in data_to.collections:
+            if coll is None:
+                continue
+            context.scene.collection.children.link(coll)
+            for ob in coll.objects:
+                ob.location = (FREE_MODEL_OFFSET_X, 0.0, 0.0)
+                ob.hide_select = True                 # 誤って動かしたり、消したりしない
+                shown += 1
+        # となりのお手本が見えるように、視点を少し引く（3Dビューから押したときだけ）
+        try:
+            sp = context.space_data
+            if sp is not None and sp.type == 'VIEW_3D' and sp.region_3d is not None:
+                r3d = sp.region_3d
+                r3d.view_location = (FREE_MODEL_OFFSET_X / 2, 0.0, 1.5)
+                r3d.view_distance = max(r3d.view_distance, 24.0)
+        except Exception:
+            pass
+        StageManager.append_participant_event(context, {
+            "t": StageManager._now(),
+            "participant_id": StageManager._safe_participant_id(props.participant_id),
+            "event": "free_model_show",
+            "model": self.model,
+            "objects": shown,
+        })
+        self.report({'INFO'}, f"お手本（{label}）を出しました。似せて作ってみましょう")
+        return {'FINISHED'}
+
+
+class TUTORIAL_OT_free_model_clear(Operator):
+    bl_idname = "tutorial.free_model_clear"
+    bl_label = "お手本を消す"
+    bl_description = "出しているお手本を消します（自分で作ったものは消えません）"
+
+    def execute(self, context):
+        props = context.scene.tutorial_props
+        n = _remove_free_models()
+        if n:
+            StageManager.append_participant_event(context, {
+                "t": StageManager._now(),
+                "participant_id": StageManager._safe_participant_id(props.participant_id),
+                "event": "free_model_clear",
+                "objects": n,
+            })
+        return {'FINISHED'}
+
+
 class TUTORIAL_OT_toggle_steps(Operator):
     bl_idname = "tutorial.toggle_steps"
     bl_label = "手順を見る"
@@ -3337,6 +3451,14 @@ class TUTORIAL_PT_main(Panel):
             fbox.label(text="・元のステージに戻るときは、章のボタンを押して【セットアップ】")
             if props.difficulty_mode != 'HARD':
                 fbox.label(text="・ショートカットは「ショートカット一覧（累積）」で確認できます")
+            mbox = layout.box()
+            mbox.label(text="お手本：似せて作ってみよう")
+            mrow = mbox.row(align=True)
+            for key, (_fname, label) in FREE_MODELS.items():
+                mrow.operator("tutorial.free_model", text=label).model = key
+            mbox.operator("tutorial.free_model_clear", text="お手本を消す")
+            mbox.label(text="・お手本は見るだけです（動かせません）")
+            mbox.label(text="・作り方は自由です。判定や正解はありません")
             fcol = layout.column()
             fcol.scale_y = 1.2
             fcol.operator("tutorial.setup_stage", text="セットアップ")
@@ -3630,6 +3752,8 @@ classes = (
     TUTORIAL_OT_render_and_mark_saved,
     TUTORIAL_OT_toggle_steps,
     TUTORIAL_OT_free_practice,
+    TUTORIAL_OT_free_model,
+    TUTORIAL_OT_free_model_clear,
     TUTORIAL_OT_intro_tour,
     TUTORIAL_OT_finish_and_turn_off,
     TUTORIAL_OT_setup_stage,
